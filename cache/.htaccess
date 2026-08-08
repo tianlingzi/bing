@@ -1,0 +1,10 @@
+# 禁止执行此目录下的任何 PHP / Perl / Python 脚本
+Options -Indexes -ExecCGI
+<FilesMatch "\.(php|phtml|pl|py|cgi|sh)$">
+    Require all denied
+</FilesMatch>
+
+# 仅允许访问常见图片格式
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|bmp)$">
+    Require all granted
+</FilesMatch>

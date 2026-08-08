@@ -1,0 +1,18 @@
+# Apache .htaccess 保护规则
+
+# 1. 禁止直接访问 config.php（只允许内部 include）
+<Files "config.php">
+    Require all denied
+</Files>
+
+# 2. 禁止目录列表
+Options -Indexes
+
+# 3. 启用默认文档
+DirectoryIndex index.php
+
+# 4. 保护 cache 目录：禁止执行 PHP，只允许访问图片
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^cache/.*\.php$ - [F,L]
+</IfModule>
