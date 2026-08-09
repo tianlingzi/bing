@@ -31,7 +31,7 @@ $rangeOptions = [
 
 // 访问形式选项（output type）
 $outputOptions = [
-    'cdn' => '本站CDN（使用阿里云EAS全球加速）',
+    'cdn' => '本站CDN（使用阿里云ESA全球加速）',
     '302' => 'Bing官方直链（与Bing官方访问速度一致）',
 ];
 
@@ -398,7 +398,7 @@ $previewUrl = $baseUrl . $previewFile;
                     <strong>🖥️ 今日壁纸 · 本站 CDN 模式</strong>
                     <ul>
                         <li>由本站先缓存壁纸，再提供壁纸服务</li>
-                        <li>本站使用阿里云EAS提供全球加速服务</li>
+                        <li>本站使用阿里云ESA提供全球加速服务</li>
                     </ul>
                 </li>
                 <li>
