@@ -26,7 +26,7 @@ $rangeOptions = [
 ];
 
 $outputOptions = [
-    'cdn' => '本站CDN（使用阿里云EAS全球加速）',
+    'cdn' => '本站CDN（使用阿里云ESA全球加速）',
     '302' => 'Bing官方直链（与Bing官方访问速度一致）',
 ];
 
@@ -383,9 +383,14 @@ $previewUrl = $baseUrl . $previewFile;
                 <li>
                     <strong>🖥️ 今日壁纸 · 本站 CDN 模式</strong>
                     <ul>
+<<<<<<< HEAD
                         <li>由本站使用阿里云 EAS 边缘加速提供全球访问</li>
                         <li>本项目本地输出模式与其他项目不同，本项目是缓存到本地再从本地读取，其他项目大多是是作为桥梁访问bing。</li>
                         <li>使用可预测性命名，最大限度使用各级缓存与加速，加快访问速度，降低流量损耗。</li>
+=======
+                        <li>由本站先缓存壁纸，再提供壁纸服务</li>
+                        <li>本站使用阿里云ESA提供全球加速服务</li>
+>>>>>>> b8ef4dca6e550614fd9fc960f0cafb0fcce69fee
                     </ul>
                 </li>
                 <li>
