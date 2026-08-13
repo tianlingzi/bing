@@ -2,11 +2,10 @@
 
 declare(strict_types=1);
 
-/**
- * 获取配置数组（使用静态变量缓存，只解析一次）
- *
- * @return array{bing_api:string, bing_host:string, mkt:string, cache_dir:string, resolutions:array<string,string>}
- */
+// ===== 重要：以下配置可按需修改 =====
+date_default_timezone_set('Asia/Shanghai'); // 修改站点时区，保证 date('Ymd') 与访问当天一致
+// ===================================
+
 function bing_config(): array
 {
     static $config = null;
@@ -19,7 +18,11 @@ function bing_config(): array
         'bing_host'   => 'https://cn.bing.com',
         'mkt'         => 'zh-CN',
         'cache_dir'   => __DIR__ . '/cache',
-        // 分辨率 => Bing 官方 URL 后缀
+        // ===== 重要：缓存 jpg 的文件名前缀，修改后所有新下载的图片名都会同步变更 =====
+        // 命名规则：{cache_filename_prefix}.YYYYMMDD.分辨率.jpg
+        // 示例：  tianlingzi.top.20260813.1920x1080.jpg
+        'cache_filename_prefix' => 'tianlingzi.top',
+        // ======================================================================
         'resolutions' => [
             '1920x1080' => '_1920x1080.jpg',
             '1366x768'  => '_1366x768.jpg',
@@ -32,12 +35,6 @@ function bing_config(): array
 }
 
 if (!function_exists('get_base_url')) {
-    /**
-     * 获取当前脚本的基础 URL（自动处理根目录/子目录）
-     * 例如：
-     *   https://www.tianlingzi.top/index.php  => https://www.tianlingzi.top/
-     *   https://www.tianlingzi.top/bing/index.php => https://www.tianlingzi.top/bing/
-     */
     function get_base_url(): string
     {
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -56,13 +53,6 @@ if (!function_exists('get_base_url')) {
 }
 
 if (!function_exists('fetch_bing_data')) {
-    /**
-     * 从 Bing API 获取壁纸数据
-     *
-     * @param int $idx 0=今天, 1=昨天, ...
-     * @param int $n   获取数量
-     * @return array|null 解码后的数组，失败返回 null
-     */
     function fetch_bing_data(int $idx = 0, int $n = 1): ?array
     {
         $config = bing_config();
@@ -99,9 +89,6 @@ if (!function_exists('fetch_bing_data')) {
 }
 
 if (!function_exists('get_bing_image_url')) {
-    /**
-     * 根据分辨率获取 Bing 图片完整 URL
-     */
     function get_bing_image_url(string $urlbase, string $resolution): string
     {
         $config = bing_config();
@@ -110,56 +97,7 @@ if (!function_exists('get_bing_image_url')) {
     }
 }
 
-if (!function_exists('output_image_direct')) {
-    /**
-     * 通过 PHP 直接输出图片（占用服务器带宽）
-     * 仅作为「本地缓存未就绪」的临时兜底使用
-     */
-    function output_image_direct(string $imgUrl): void
-    {
-        $ch = curl_init($imgUrl);
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $imgUrl,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_TIMEOUT        => 30,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HEADER         => false,
-        ]);
-
-        $imgData     = curl_exec($ch);
-        $httpCode    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
-        curl_close($ch);
-
-        if ($imgData === false || $httpCode !== 200) {
-            http_response_code(500);
-            exit('Failed to fetch image');
-        }
-
-        header('Content-Type: ' . ($contentType ?: 'image/jpeg'));
-        header('Cache-Control: public, max-age=3600');
-        echo $imgData;
-        exit;
-    }
-}
-
-if (!function_exists('redirect_image')) {
-    /**
-     * 302 跳转到 Bing 图片直链（不占用服务器带宽）
-     */
-    function redirect_image(string $imgUrl): void
-    {
-        header('Location: ' . $imgUrl, true, 302);
-        exit;
-    }
-}
-
 if (!function_exists('ensure_cache_dir')) {
-    /**
-     * 确保 cache 目录存在，不存在则创建
-     */
     function ensure_cache_dir(): bool
     {
         $config   = bing_config();
@@ -171,36 +109,36 @@ if (!function_exists('ensure_cache_dir')) {
     }
 }
 
+if (!function_exists('get_cache_file_path')) {
+    // 公共工具：按 日期 + 分辨率 拼出 cache 中精确的 jpg 绝对路径
+    function get_cache_file_path(string $resolution, string $date): ?string
+    {
+        if (!preg_match('/^\d{8}$/', $date)) {
+            return null;
+        }
+        $config = bing_config();
+        return $config['cache_dir'] . '/'
+            . $config['cache_filename_prefix'] . '.' . $date . '.' . $resolution . '.jpg';
+    }
+}
+
 if (!function_exists('download_image_to_cache')) {
-    /**
-     * 下载 Bing 图片到本地 cache 目录
-     * 文件名格式：`日期(bing enddate)_时间戳(urlbase内的名称)_分辨率后缀`
-     *   例如：20260809_OHR.XXXXX_zh-CN_1920x1080.jpg
-     * 传入 $enddate 可选，保证每天只有一份"今日"缓存的主记录
-     *
-     * @return string|null 成功返回本地绝对路径，失败返回 null
-     */
     function download_image_to_cache(string $urlbase, string $resolution, ?string $enddate = null): ?string
     {
         if (!ensure_cache_dir()) {
             return null;
         }
 
-        $config   = bing_config();
-        $cacheDir = $config['cache_dir'];
-        $suffix   = $config['resolutions'][$resolution] ?? '_1920x1080.jpg';
+        $date = ($enddate !== null && $enddate !== '') ? $enddate : date('Ymd');
+        if (!preg_match('/^\d{8}$/', (string)$date)) {
+            $date = date('Ymd');
+        }
 
-        // 从 urlbase 提取 Bing 的文件名（包含时间戳/图片标识）
-        $parts    = explode('/', trim($urlbase, '/'));
-        $namePart = end($parts);
+        $filePath = get_cache_file_path($resolution, (string)$date);
+        if ($filePath === null) {
+            return null;
+        }
 
-        // 如果提供了 enddate，前缀带上"YYYYMMDD_"方便人工识别
-        $prefix = ($enddate !== null && $enddate !== '') ? ($enddate . '_') : '';
-        $fileName = $prefix . $namePart . $suffix;
-
-        $filePath = $cacheDir . '/' . $fileName;
-
-        // 已存在（同一张同一天同分辨率）直接返回，避免重复下载
         if (file_exists($filePath) && filesize($filePath) > 0) {
             return $filePath;
         }
@@ -225,87 +163,55 @@ if (!function_exists('download_image_to_cache')) {
         }
 
         $written = @file_put_contents($filePath, $imgData);
-        if ($written === false) {
-            return null;
-        }
-
-        return $filePath;
+        return $written !== false ? $filePath : null;
     }
 }
 
 if (!function_exists('get_today_cached_file')) {
-    /**
-     * 本地 CDN 模式：查找「今日」对应分辨率的缓存文件
-     * 匹配规则：文件名以"今天日期 YYYYMMDD_"开头，并且以对应分辨率后缀结尾
-     *
-     * @return string|null 命中返回本地路径，未命中返回 null
-     */
     function get_today_cached_file(string $resolution): ?string
     {
-        $config   = bing_config();
-        $cacheDir = $config['cache_dir'];
-        if (!is_dir($cacheDir)) {
+        return get_date_cached_file($resolution, date('Ymd'));
+    }
+}
+
+if (!function_exists('get_date_cached_file')) {
+    // 按固定命名精确查找（不依赖 glob），性能更高
+    function get_date_cached_file(string $resolution, string $date): ?string
+    {
+        $filePath = get_cache_file_path($resolution, $date);
+        if ($filePath === null) {
             return null;
         }
-
-        $today   = date('Ymd');
-        $suffix  = $config['resolutions'][$resolution] ?? '_1920x1080.jpg';
-        $pattern = $cacheDir . '/' . $today . '_*' . $suffix;
-        $files   = glob($pattern);
-
-        if (empty($files)) {
-            return null;
+        if (file_exists($filePath) && is_readable($filePath) && filesize($filePath) > 0) {
+            return $filePath;
         }
-
-        // 取第一张（一天一份，一般只有一张；如果有多张取最新修改的）
-        usort($files, static fn($a, $b) => filemtime($b) <=> filemtime($a));
-        return $files[0];
+        return null;
     }
 }
 
 if (!function_exists('output_local_image')) {
-    /**
-     * 输出本地文件为图片（Content-Type / Cache-Control / Content-Length 齐全）
-     */
-    function output_local_image(string $filePath): void
+    function output_local_image(string $filePath, string $cacheControl = 'no-cache, must-revalidate'): void
     {
         if (!file_exists($filePath) || !is_readable($filePath)) {
             http_response_code(404);
-            exit('Image not found in cache');
+            exit('NOT FOUND');
         }
 
         header('Content-Type: image/jpeg');
-        header('Cache-Control: public, max-age=86400');
+        header('Cache-Control: ' . $cacheControl);
         header('Content-Length: ' . (string)filesize($filePath));
         readfile($filePath);
         exit;
     }
 }
 
-if (!function_exists('get_random_cached_file')) {
-    /**
-     * 随机模式：从 cache 目录中所有同分辨率后缀的 jpg 里随机一张
-     * 不再做任何时间限制/删除，只要存在就进入随机池
-     *
-     * @return string|null 有则返回本地路径，无则返回 null
-     */
-    function get_random_cached_file(string $resolution): ?string
+if (!function_exists('redirect_cache_image')) {
+    // 302 跳转到 /cache/xxx.jpg。Location: 建议用绝对 URL，兼容子目录部署。
+    function redirect_cache_image(string $fileName, int $maxAgeSeconds): void
     {
-        $config   = bing_config();
-        $cacheDir = $config['cache_dir'];
-
-        if (!is_dir($cacheDir)) {
-            return null;
-        }
-
-        $suffix = $config['resolutions'][$resolution] ?? '_1920x1080.jpg';
-        $files  = glob($cacheDir . '/*' . $suffix);
-
-        if (empty($files)) {
-            return null;
-        }
-
-        $randomKey = array_rand($files);
-        return $files[$randomKey];
+        $location = get_base_url() . 'cache/' . rawurlencode($fileName);
+        header('Cache-Control: public, max-age=' . $maxAgeSeconds . ', must-revalidate');
+        header('Location: ' . $location, true, 302);
+        exit;
     }
 }

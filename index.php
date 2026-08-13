@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-// 获取基础 URL（自动处理根目录和子目录）
 $baseUrl = get_base_url();
 
-// 分辨率选项
 $resolutionOptions = [
     '1920x1080' => '1920×1080 (1080P 高清横版)',
     '1366x768'  => '1366×768 (笔记本横版)',
@@ -15,7 +13,6 @@ $resolutionOptions = [
     'uhd'       => 'UHD (超高清原图)',
 ];
 
-// 分辨率对应的 key（用于文件名）
 $resolutionKeys = [
     '1920x1080' => '1920x1080',
     '1366x768'  => '1366x768',
@@ -23,59 +20,48 @@ $resolutionKeys = [
     'uhd'       => 'uhd',
 ];
 
-// 模式选项：日期范围
 $rangeOptions = [
     'today'  => '今日壁纸',
     'random' => '随机历史壁纸（由本站缓存随机输出）',
 ];
 
-// 访问形式选项（output type）
 $outputOptions = [
     'cdn' => '本站CDN（使用阿里云EAS全球加速）',
     '302' => 'Bing官方直链（与Bing官方访问速度一致）',
 ];
 
-// 处理表单提交，生成 URL
-$generatedUrl = '';
-$previewUrl   = '';
-$copiedScript = '';
+$generatedUrl   = '';
+$previewUrl     = '';
+$copiedScript   = '';
 
-// 所有默认值统一声明（GET / POST 都走同一套默认）
+// ===== 可修改：URL 拼接器的默认值 =====
 $defaultRange      = 'today';
-$defaultOutput     = 'cdn';      // 默认：本地 CDN，与用户期望一致
+$defaultOutput     = 'cdn';
 $defaultResolution = '1920x1080';
+// ====================================
 
-// 读当前值：POST 有就用 POST，否则走默认
 $range      = $_POST['range']      ?? $defaultRange;
 $output     = $_POST['output']     ?? $defaultOutput;
 $resolution = $_POST['resolution'] ?? $defaultResolution;
 
-// 白名单校验，防止前端被改出非法值
-if (!array_key_exists($range, $rangeOptions))               { $range      = $defaultRange; }
-if (!array_key_exists($output, $outputOptions))             { $output     = $defaultOutput; }
-if (!array_key_exists($resolution, $resolutionOptions))     { $resolution = $defaultResolution; }
+if (!array_key_exists($range, $rangeOptions))           { $range      = $defaultRange; }
+if (!array_key_exists($output, $outputOptions))         { $output     = $defaultOutput; }
+if (!array_key_exists($resolution, $resolutionOptions)) { $resolution = $defaultResolution; }
 
 $resKey  = $resolutionKeys[$resolution] ?? '1920x1080';
 $fileKey = ($resKey === 'm' ? 'm' : $resKey);
 
-// 根据选项组合文件名（GET 也会生成一个默认 URL，保证页面一打开就显示）
 $fileName = match (true) {
-    // 随机：从本地 cache 随机（全历史，不限天数），只有直输模式
-    $range === 'random' => 'rand_' . $fileKey . '.php',
-
-    // 今日 - 本地 CDN：首次访问会把图片写入 cache/，下次就从本地读
+    $range === 'random'               => 'rand_' . $fileKey . '.php',
     $range === 'today' && $output === 'cdn' => $resKey . '.php',
-
-    // 今日 - 官方直链：302 跳 Bing 官方
-    default => $resKey . '_302.php',
+    default                           => $resKey . '_302.php',
 };
 
 $generatedUrl = $baseUrl . $fileName;
 
-// 预览图统一用"会输出图片的脚本"（避免 302 防盗链/跨域问题）
 $previewFile = match ($range) {
     'random' => 'rand_' . $fileKey . '.php',
-    default  => $resKey . '.php',     // 今日走本地 CDN 脚本
+    default  => $resKey . '.php',
 };
 $previewUrl = $baseUrl . $previewFile;
 ?>
@@ -101,7 +87,6 @@ $previewUrl = $baseUrl . $previewFile;
             position: relative;
         }
         body::before {
-            /* 给页面背景增加一层淡淡的暗色蒙版，保证前景文字可读 */
             content: '';
             position: fixed;
             inset: 0;
@@ -111,7 +96,7 @@ $previewUrl = $baseUrl . $previewFile;
         .container {
             max-width: 960px;
             margin: 0 auto;
-            background: #fff;
+            background: rgba(255, 255, 255, 0.8);
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2);
             overflow: hidden;
@@ -160,7 +145,7 @@ $previewUrl = $baseUrl . $previewFile;
             font-size: 13px;
         }
         pre {
-            background: #f4f6fa;
+            background: rgba(255, 255, 255, 0.7);
             padding: 15px 18px;
             border-radius: 8px;
             overflow-x: auto;
@@ -176,7 +161,7 @@ $previewUrl = $baseUrl . $previewFile;
 
         /* ========== 表单 ========== */
         .generator {
-            background: #f8faff;
+            background: rgba(255, 255, 255, 0.7);
             border: 1px solid #e0e7ff;
             border-radius: 12px;
             padding: 25px;
@@ -300,17 +285,18 @@ $previewUrl = $baseUrl . $previewFile;
             margin-top: 12px;
         }
         .file-card {
-            border: 1px solid #e5e9f2;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #7ea1f2;
             border-radius: 8px;
             padding: 14px;
             transition: border 0.15s, box-shadow 0.15s;
         }
         .file-card:hover {
             border-color: #0078d4;
-            box-shadow: 0 4px 14px rgba(0,120,212,0.1);
+            box-shadow: 0 4px 14px rgba(0, 120, 212, 0.75);
         }
         .file-card a {
-            color: #0078d4;
+            color: #1198ff;
             text-decoration: none;
             font-weight: 600;
             font-family: "Consolas", monospace;
@@ -397,14 +383,15 @@ $previewUrl = $baseUrl . $previewFile;
                 <li>
                     <strong>🖥️ 今日壁纸 · 本站 CDN 模式</strong>
                     <ul>
-                        <li>由本站先缓存壁纸，再提供壁纸服务</li>
-                        <li>本站使用阿里云EAS提供全球加速服务</li>
+                        <li>由本站使用阿里云 EAS 边缘加速提供全球访问</li>
+                        <li>本项目本地输出模式与其他项目不同，本项目是缓存到本地再从本地读取，其他项目大多是是作为桥梁访问bing。</li>
+                        <li>使用可预测性命名，最大限度使用各级缓存与加速，加快访问速度，降低流量损耗。</li>
                     </ul>
                 </li>
                 <li>
                     <strong>🎲 随机历史壁纸</strong>
                     <ul>
-                        <li>从本站的历史缓存中随机输出符合的壁纸</li>
+                        <li>从本站的历史缓存中随机输出符合的壁纸（默认是过去30天内的壁纸）</li>
                     </ul>
                 </li>
             </ol>
@@ -415,7 +402,7 @@ $previewUrl = $baseUrl . $previewFile;
 &lt;img src="<?= htmlspecialchars($baseUrl) ?>1920x1080_302.php" alt="Bing 每日壁纸" /&gt;
 
 &lt;!-- Markdown 示例 --&gt;
-![Bing 壁纸](<?= htmlspecialchars($baseUrl) ?>uhd_302.php)</code></pre>
+![Bing 壁纸](<?= htmlspecialchars($baseUrl) ?>uhd.php?d=<?= htmlspecialchars(date('Ymd')) ?>)</code></pre>
         </div>
 
         <!-- URL 生成工具 -->
@@ -525,7 +512,7 @@ $previewUrl = $baseUrl . $previewFile;
                         <a href="<?= htmlspecialchars($baseUrl . 'rand_' . $fileKey . '.php') ?>" target="_blank" rel="noopener">
                             rand_<?= htmlspecialchars($fileKey) ?>.php
                         </a>
-                        <small><?= htmlspecialchars($label) ?><br><span class="tag tag-local">本地随机</span></small>
+                        <small><?= htmlspecialchars($label) ?><br><span class="tag tag-local">本地随机（30天）</span></small>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -534,7 +521,7 @@ $previewUrl = $baseUrl . $previewFile;
 
     <div class="footer">
          Powered by <a href="https://www.tianlingzi.top" target="_blank" rel="noopener"
-                        style="color:#fff;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.5);">灵感小屋</a>
+                        style="color:#3362FD;text-decoration:none;">灵感小屋</a>
     </div>
 </div>
 
