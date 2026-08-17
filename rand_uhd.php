@@ -18,5 +18,11 @@ $date   = date('Ymd', time() - $offset * 86400);
 
 $config   = bing_config();
 $fileName = $config['cache_filename_prefix'] . '.' . $date . '.' . $RESOLUTION . '.jpg';
+$filePath = get_cache_file_path($RESOLUTION, $date);
 
-redirect_cache_image($fileName, 0);
+if($filePath && file_exists($filePath) && is_readable($filePath)){
+    output_local_image($filePath, "no‑store, no‑cache, must‑revalidate");
+}else{
+    http_response_code(404);
+    exit("image missing");
+}
