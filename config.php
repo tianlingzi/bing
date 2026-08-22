@@ -122,8 +122,90 @@ if (!function_exists('get_cache_file_path')) {
     }
 }
 
+if (!function_exists('build_xmp_packet')) {
+    // 构建 XMP 数据包
+    function build_xmp_packet(array $img): string
+    {
+        $rawCopyright = (string)($img['copyright'] ?? '');
+        $desc     = $rawCopyright;          // 描述部分（括号前）
+        $crNotice = '';                     // 版权声明（括号内，含 ©）
+        $author   = '';                     // 作者（去掉 © 前缀）
+        if (preg_match('/^(.*?)\s*[（(]\s*(©.+?)[）)]\s*$/u', $rawCopyright, $m)) {
+            $desc     = trim($m[1]);
+            $crNotice = $m[2];
+            $author   = preg_replace('/^©\s*/u', '', $crNotice);
+        }
+
+        $title = !empty($img['title']) ? (string)$img['title'] : $desc;
+
+        $keywords = ['Bing'];
+        if ($desc !== '') {
+            foreach (preg_split('/[，,]\s*/u', $desc) as $p) {
+                $p = trim($p);
+                if ($p !== '') {
+                    $keywords[] = $p;
+                }
+            }
+        }
+
+        // 日期格式化：YYYYMMDD → YYYY-MM-DDTHH:MM:SS
+        $dateStr = '';
+        if (!empty($img['enddate']) && preg_match('/^(\d{4})(\d{2})(\d{2})$/', (string)$img['enddate'], $m)) {
+            $dateStr = $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00';
+        }
+
+        $esc = fn ($s) => htmlspecialchars((string)$s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+        $titleXml    = $title    !== '' ? '   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">' . $esc($title)    . '</rdf:li></rdf:Alt></dc:title>' . "\n" : '';
+        $descXml     = $desc     !== '' ? '   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">' . $esc($desc) . '</rdf:li></rdf:Alt></dc:description>' . "\n" : '';
+        $rightsXml   = $crNotice !== '' ? '   <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">' . $esc($crNotice) . '</rdf:li></rdf:Alt></dc:rights>' . "\n" : '';
+        $creatorXml  = $author   !== '' ? '   <dc:creator><rdf:Seq><rdf:li>' . $esc($author) . '</rdf:li></rdf:Seq></dc:creator>' . "\n" : '';
+        $keywordsXml = '';
+        if (!empty($keywords)) {
+            $items = array_map(fn ($k) => '<rdf:li>' . $esc($k) . '</rdf:li>', $keywords);
+            $keywordsXml = '   <dc:subject><rdf:Bag>' . implode('', $items) . '</rdf:Bag></dc:subject>' . "\n";
+        }
+        $dateXml = $dateStr !== '' ? '   <xmp:CreateDate>' . $esc($dateStr) . '</xmp:CreateDate>' . "\n" : '';
+
+        return '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d?"?>' . "\n"
+             . '<x:xmpmeta xmlns:x="adobe:ns:meta/">' . "\n"
+             . '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' . "\n"
+             . ' <rdf:Description rdf:about=""' . "\n"
+             . '   xmlns:dc="http://purl.org/dc/elements/1.1/"' . "\n"
+             . '   xmlns:xmp="http://ns.adobe.com/xap/1.0/">' . "\n"
+             . $titleXml
+             . $descXml
+             . $keywordsXml
+             . $creatorXml
+             . $rightsXml
+             . $dateXml
+             . ' </rdf:Description>' . "\n"
+             . '</rdf:RDF>' . "\n"
+             . '</x:xmpmeta>' . "\n"
+             . '<?xpacket end="w"?>';
+    }
+}
+
+if (!function_exists('embed_xmp_in_jpeg')) {
+    // 将 XMP 数据包作为 APP1 段插入 JPEG（紧随 SOI 标记 FF D8 之后）
+    function embed_xmp_in_jpeg(string $jpegData, string $xmpPacket): string
+    {
+        if (strlen($jpegData) < 2 || substr($jpegData, 0, 2) !== "\xFF\xD8") {
+            return $jpegData; // 非 JPEG，原样返回
+        }
+        $ns      = "http://ns.adobe.com/xap/1.0/\x00";
+        $payload = $ns . $xmpPacket;
+        $segLen  = strlen($payload) + 2;
+        if ($segLen > 65533) {
+            return $jpegData;
+        }
+        $app1 = "\xFF\xE1" . chr(($segLen >> 8) & 0xFF) . chr($segLen & 0xFF) . $payload;
+        return "\xFF\xD8" . $app1 . substr($jpegData, 2);
+    }
+}
+
 if (!function_exists('download_image_to_cache')) {
-    function download_image_to_cache(string $urlbase, string $resolution, ?string $enddate = null): ?string
+    function download_image_to_cache(string $urlbase, string $resolution, ?string $enddate = null, array $img = []): ?string
     {
         if (!ensure_cache_dir()) {
             return null;
@@ -162,6 +244,17 @@ if (!function_exists('download_image_to_cache')) {
             return null;
         }
 
+        // 在内存中嵌入 XMP 元数据（标题/描述/版权/作者/日期/关键词）
+        if (!empty($img)) {
+            $xmp = build_xmp_packet($img);
+            if ($xmp !== '') {
+                $imgWithXmp = embed_xmp_in_jpeg($imgData, $xmp);
+                if ($imgWithXmp !== $imgData) {
+                    $imgData = $imgWithXmp;
+                }
+            }
+        }
+
         $written = @file_put_contents($filePath, $imgData);
         return $written !== false ? $filePath : null;
     }
@@ -175,7 +268,6 @@ if (!function_exists('get_today_cached_file')) {
 }
 
 if (!function_exists('get_date_cached_file')) {
-    // 按固定命名精确查找（不依赖 glob），性能更高
     function get_date_cached_file(string $resolution, string $date): ?string
     {
         $filePath = get_cache_file_path($resolution, $date);

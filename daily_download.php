@@ -16,7 +16,7 @@ $today   = date('Ymd');
 $config      = bing_config();
 $resolutions = array_keys($config['resolutions']);
 foreach ($resolutions as $res) {
-    download_image_to_cache($urlbase, $res, $today);
+    download_image_to_cache($urlbase, $res, $today, $img);
 }
 
 exit;
