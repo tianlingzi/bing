@@ -127,22 +127,29 @@ if (!function_exists('parse_bing_metadata')) {
     // 解析 Bing 图片元数据
     function parse_bing_metadata(array $img): array
     {
-
         $rawCopyright = (string)($img['copyright'] ?? '');
-        $desc     = $rawCopyright;          // 描述部分（括号前）
-        $crNotice = '';                     // 版权声明（括号内，含 ©）
-        $author   = '';                     // 作者（去掉 © 前缀）
+
+        $prefix   = $rawCopyright;
+        $crNotice = '';
+        $author   = '';
         if (preg_match('/^(.*?)\s*[（(]\s*(©.+?)[）)]\s*$/u', $rawCopyright, $m)) {
-            $desc     = trim($m[1]);
+            $prefix   = trim($m[1]);
             $crNotice = $m[2];
             $author   = preg_replace('/^©\s*/u', '', $crNotice);
         }
 
-        $title = !empty($img['title']) ? (string)$img['title'] : $desc;
+        $description = $prefix;
+        $tagsRaw     = '';
+        if (preg_match('/^([^，,]+)[，,]\s*(.+)$/u', $prefix, $m2)) {
+            $description = trim($m2[1]);
+            $tagsRaw     = trim($m2[2]);
+        }
+
+        $title = !empty($img['title']) ? (string)$img['title'] : $description;
 
         $keywords = ['Bing'];
-        if ($desc !== '') {
-            foreach (preg_split('/[，,]\s*/u', $desc) as $p) {
+        if ($tagsRaw !== '') {
+            foreach (preg_split('/[，,]\s*/u', $tagsRaw) as $p) {
                 $p = trim($p);
                 if ($p !== '') {
                     $keywords[] = $p;
@@ -152,7 +159,8 @@ if (!function_exists('parse_bing_metadata')) {
 
         return [
             'title'            => $title,
-            'description'      => $desc,
+            'description'      => $description,
+            'description_web'  => $prefix,
             'copyright_notice' => $crNotice,
             'author'           => $author,
             'raw_copyright'    => $rawCopyright,
@@ -351,6 +359,7 @@ if (!function_exists('init_db')) {
             bing_enddate TEXT,
             title TEXT,
             description TEXT,
+            description_web TEXT,
             raw_copyright TEXT,
             copyright_notice TEXT,
             author TEXT,
@@ -398,14 +407,15 @@ if (!function_exists('save_wallpaper_record')) {
         }
 
         $stmt = db()->prepare("INSERT OR REPLACE INTO wallpapers
-            (date, bing_enddate, title, description, raw_copyright, copyright_notice, author, urlbase,
+            (date, bing_enddate, title, description, description_web, raw_copyright, copyright_notice, author, urlbase,
              file_1920x1080, file_1366x768, file_1080x1920, file_uhd, keywords, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         return $stmt->execute([
             $date,
             (string)($img['enddate'] ?? ''),
             $p['title'],
             $p['description'],
+            $p['description_web'],
             $p['raw_copyright'],
             $p['copyright_notice'],
             $p['author'],

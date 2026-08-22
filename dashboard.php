@@ -7,7 +7,6 @@ require_once __DIR__ . '/config.php';
 $baseUrl   = rtrim(get_base_url(), '/');
 $cacheBase = $baseUrl . '/cache/';
 
-// 视图模式：默认 / 月份（?month=YYYY-MM）
 $monthParam = (string)($_GET['month'] ?? '');
 $isMonth    = preg_match('/^(\d{4})-(\d{2})$/', $monthParam, $monthMatch);
 
@@ -25,7 +24,6 @@ if ($isMonth) {
 
 $months = query_all_months();
 
-// 辅助函数
 function format_date_chinese(string $date): string
 {
     if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $date, $m)) {
@@ -46,12 +44,12 @@ function wallpaper_hero_url(array $w, string $cacheBase): string
     return $file !== null && $file !== '' ? $cacheBase . rawurlencode($file) : '';
 }
 
-// 构造 JS 端使用的清爽数据结构
 $wallpapersJS = array_map(static function ($w) {
     return [
         'date'             => $w['date'],
         'title'            => $w['title'],
         'description'      => $w['description'],
+        'description_web'  => $w['description_web'] ?? $w['description'],
         'author'           => $w['author'],
         'copyright_notice' => $w['copyright_notice'],
         'raw_copyright'    => $w['raw_copyright'],
@@ -223,11 +221,13 @@ a { color: inherit; text-decoration: none; }
 <!-- Hero 区：满屏壁纸 + 左下角信息 -->
 <section class="hero" style="background-image:url('<?= htmlspecialchars(wallpaper_hero_url($heroWallpaper, $cacheBase)) ?>')">
     <div class="hero-info">
-        <h1 class="hero-title"><?= htmlspecialchars($heroWallpaper['title'] ?: $heroWallpaper['description']) ?></h1>
-        <?php $heroDesc = $heroWallpaper['description']; ?>
-        <?php $heroTitleVal = $heroWallpaper['title'] ?: $heroWallpaper['description']; ?>
-        <?php if ($heroDesc !== '' && $heroDesc !== $heroTitleVal): ?>
-            <p class="hero-subtitle"><?= htmlspecialchars($heroDesc) ?></p>
+        <h1 class="hero-title"><?= htmlspecialchars($heroWallpaper['title'] ?: ($heroWallpaper['description_web'] ?? $heroWallpaper['description'])) ?></h1>
+        <?php
+        $heroSub = $heroWallpaper['description_web'] ?? $heroWallpaper['description'];
+        $heroTitleVal = $heroWallpaper['title'] ?: $heroSub;
+        if ($heroSub !== '' && $heroSub !== $heroTitleVal):
+        ?>
+            <p class="hero-subtitle"><?= htmlspecialchars($heroSub) ?></p>
         <?php endif; ?>
         <div class="hero-meta">
             <p><?= htmlspecialchars(format_date_chinese($heroWallpaper['date'])) ?></p>
@@ -344,13 +344,14 @@ function openModal(date) {
     const w = WALLPAPERS.find(x => x.date === date);
     if (!w) return;
 
+    const sub = w.description_web || w.description || '';
     modalImg.src = cacheUrl(w.file_1920x1080 || w.file_1366x768);
-    modalImg.alt = w.title || w.description || '';
-    modalTitle.textContent   = w.title || w.description || '';
+    modalImg.alt = w.title || sub || '';
+    modalTitle.textContent   = w.title || sub || '';
     modalDate.textContent    = formatDateCN(w.date);
     modalAuthor.textContent  = w.author || '—';
     modalCopyright.textContent = w.copyright_notice || w.raw_copyright || '';
-    modalDesc.textContent    = w.description || '';
+    modalDesc.textContent    = sub;
 
     modalKeywords.innerHTML = '';
     if (Array.isArray(w.keywords) && w.keywords.length > 0) {
