@@ -23,6 +23,7 @@ function bing_config(): array
         // 示例：  tianlingzi.top.20260813.1920x1080.jpg
         'cache_filename_prefix' => 'tianlingzi.top',
         // ======================================================================
+        'db_path'     => __DIR__ . '/data/wallpapers.db',
         'resolutions' => [
             '1920x1080' => '_1920x1080.jpg',
             '1366x768'  => '_1366x768.jpg',
@@ -122,10 +123,11 @@ if (!function_exists('get_cache_file_path')) {
     }
 }
 
-if (!function_exists('build_xmp_packet')) {
-    // 构建 XMP 数据包
-    function build_xmp_packet(array $img): string
+if (!function_exists('parse_bing_metadata')) {
+    // 解析 Bing 图片元数据
+    function parse_bing_metadata(array $img): array
     {
+
         $rawCopyright = (string)($img['copyright'] ?? '');
         $desc     = $rawCopyright;          // 描述部分（括号前）
         $crNotice = '';                     // 版权声明（括号内，含 ©）
@@ -147,6 +149,28 @@ if (!function_exists('build_xmp_packet')) {
                 }
             }
         }
+
+        return [
+            'title'            => $title,
+            'description'      => $desc,
+            'copyright_notice' => $crNotice,
+            'author'           => $author,
+            'raw_copyright'    => $rawCopyright,
+            'keywords'         => $keywords,
+        ];
+    }
+}
+
+if (!function_exists('build_xmp_packet')) {
+    // 构建 XMP 数据包
+    function build_xmp_packet(array $img): string
+    {
+        $p        = parse_bing_metadata($img);
+        $title    = $p['title'];
+        $desc     = $p['description'];
+        $crNotice = $p['copyright_notice'];
+        $author   = $p['author'];
+        $keywords = $p['keywords'];
 
         // 日期格式化：YYYYMMDD → YYYY-MM-DDTHH:MM:SS
         $dateStr = '';
@@ -305,5 +329,158 @@ if (!function_exists('redirect_cache_image')) {
         header('Cache-Control: public, max-age=' . $maxAgeSeconds . ', must-revalidate');
         header('Location: ' . $location, true, 302);
         exit;
+    }
+}
+
+// ==================== SQLite 元数据存储 ====================
+
+if (!function_exists('init_db')) {
+    // 初始化数据库表结构
+    function init_db(): bool
+    {
+        $dbPath = bing_config()['db_path'];
+        $dir = dirname($dbPath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        $pdo = new PDO('sqlite:' . $dbPath);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec("CREATE TABLE IF NOT EXISTS wallpapers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            bing_enddate TEXT,
+            title TEXT,
+            description TEXT,
+            raw_copyright TEXT,
+            copyright_notice TEXT,
+            author TEXT,
+            urlbase TEXT,
+            file_1920x1080 TEXT,
+            file_1366x768 TEXT,
+            file_1080x1920 TEXT,
+            file_uhd TEXT,
+            keywords TEXT,
+            created_at INTEGER
+        )");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_wallpapers_date ON wallpapers(date)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_wallpapers_enddate ON wallpapers(bing_enddate)");
+        return true;
+    }
+}
+
+if (!function_exists('db')) {
+    function db(): PDO
+    {
+        static $pdo = null;
+        if ($pdo === null) {
+            init_db();
+            $pdo = new PDO('sqlite:' . bing_config()['db_path']);
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        }
+        return $pdo;
+    }
+}
+
+if (!function_exists('save_wallpaper_record')) {
+    // 将 Bing 图片元数据写入/更新到 DB（INSERT OR REPLACE）
+    // $img 参数为 Bing API 返回的 images[0] 元素
+    function save_wallpaper_record(array $img): bool
+    {
+        $p        = parse_bing_metadata($img);
+        $date     = date('Ymd');
+        $config   = bing_config();
+        $prefix   = $config['cache_filename_prefix'];
+
+        $files = [];
+        foreach (array_keys($config['resolutions']) as $res) {
+            $files[$res] = $prefix . '.' . $date . '.' . $res . '.jpg';
+        }
+
+        $stmt = db()->prepare("INSERT OR REPLACE INTO wallpapers
+            (date, bing_enddate, title, description, raw_copyright, copyright_notice, author, urlbase,
+             file_1920x1080, file_1366x768, file_1080x1920, file_uhd, keywords, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        return $stmt->execute([
+            $date,
+            (string)($img['enddate'] ?? ''),
+            $p['title'],
+            $p['description'],
+            $p['raw_copyright'],
+            $p['copyright_notice'],
+            $p['author'],
+            (string)($img['urlbase'] ?? ''),
+            $files['1920x1080'] ?? null,
+            $files['1366x768']  ?? null,
+            $files['1080x1920'] ?? null,
+            $files['uhd']       ?? null,
+            json_encode($p['keywords'], JSON_UNESCAPED_UNICODE),
+            time(),
+        ]);
+    }
+}
+
+if (!function_exists('query_latest_wallpaper')) {
+    function query_latest_wallpaper(): ?array
+    {
+        $stmt = db()->query("SELECT * FROM wallpapers ORDER BY date DESC LIMIT 1");
+        $row = $stmt->fetch();
+        return $row !== false ? $row : null;
+    }
+}
+
+if (!function_exists('query_wallpaper_by_date')) {
+    function query_wallpaper_by_date(string $date): ?array
+    {
+        $stmt = db()->prepare("SELECT * FROM wallpapers WHERE date = ?");
+        $stmt->execute([$date]);
+        $row = $stmt->fetch();
+        return $row !== false ? $row : null;
+    }
+}
+
+if (!function_exists('query_wallpapers_by_month')) {
+    // $year='2026', $month='08' → 返回该月所有记录，按日期倒序
+    function query_wallpapers_by_month(string $year, string $month): array
+    {
+        $prefix = $year . $month;
+        $stmt = db()->prepare("SELECT * FROM wallpapers WHERE date LIKE ? ORDER BY date DESC");
+        $stmt->execute([$prefix . '%']);
+        return $stmt->fetchAll();
+    }
+}
+
+if (!function_exists('query_latest_wallpaper_of_month')) {
+    function query_latest_wallpaper_of_month(string $year, string $month): ?array
+    {
+        $prefix = $year . $month;
+        $stmt = db()->prepare("SELECT * FROM wallpapers WHERE date LIKE ? ORDER BY date DESC LIMIT 1");
+        $stmt->execute([$prefix . '%']);
+        $row = $stmt->fetch();
+        return $row !== false ? $row : null;
+    }
+}
+
+if (!function_exists('query_all_months')) {
+    // 返回所有月份分组，含每月壁纸数量和最新日期
+    function query_all_months(): array
+    {
+        $stmt = db()->query("SELECT
+            substr(date, 1, 4) AS year,
+            substr(date, 5, 2) AS month,
+            COUNT(*) AS count,
+            MAX(date) AS latest_date
+            FROM wallpapers
+            GROUP BY year, month
+            ORDER BY year DESC, month DESC");
+        return $stmt->fetchAll();
+    }
+}
+
+if (!function_exists('query_all_wallpapers')) {
+    function query_all_wallpapers(): array
+    {
+        $stmt = db()->query("SELECT * FROM wallpapers ORDER BY date DESC");
+        return $stmt->fetchAll();
     }
 }

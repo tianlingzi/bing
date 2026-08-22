@@ -19,4 +19,6 @@ foreach ($resolutions as $res) {
     download_image_to_cache($urlbase, $res, $today, $img);
 }
 
+save_wallpaper_record($img);
+
 exit;

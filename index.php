@@ -70,7 +70,7 @@ $previewUrl = $baseUrl . $previewFile;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bing 每日壁纸 API 代理服务</title>
+    <title>Bing 每日壁纸 代理服务</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -207,7 +207,7 @@ $previewUrl = $baseUrl . $previewFile;
             background: #fff;
             border: 1px solid #e0e7ff;
             border-radius: 10px;
-            display: block;   /* 移除按钮后，结果区默认直接显示 */
+            display: block;
             animation: fadeIn 0.35s ease;
         }
         @keyframes fadeIn {
@@ -359,11 +359,16 @@ $previewUrl = $baseUrl . $previewFile;
 <div class="container">
     <!-- 头部 -->
     <div class="header">
-        <h1>🌄 Bing 每日壁纸 API 代理服务</h1>
+        <h1>🌄 Bing 每日壁纸 代理服务</h1>
         <p>基于 Bing 首页每日壁纸的开源 API，支持多种分辨率、302 直链跳转、历史随机等功能。</p>
     </div>
 
     <div class="content">
+
+        <div class="section" onclick="window.open('dashboard.php','_blank')" style="cursor: pointer;">
+            <h2>点此跳转壁纸墙</h2>
+            <p>查看服务器中保存的历史壁纸</p>
+        </div>
 
         <!-- 项目介绍与使用说明 -->
         <div class="section">
