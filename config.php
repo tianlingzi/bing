@@ -494,3 +494,13 @@ if (!function_exists('query_all_wallpapers')) {
         return $stmt->fetchAll();
     }
 }
+
+if (!function_exists('query_latest_n_wallpapers')) {
+    function query_latest_n_wallpapers(int $limit = 30): array
+    {
+        $limit = max(1, $limit);
+        $stmt = db()->prepare("SELECT * FROM wallpapers ORDER BY date DESC LIMIT ?");
+        $stmt->execute([$limit]);
+        return $stmt->fetchAll();
+    }
+}

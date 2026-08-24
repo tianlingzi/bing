@@ -18,7 +18,8 @@ if ($isMonth) {
     $pageTitle     = ((int)$year) . '年' . ((int)$month) . '月壁纸';
 } else {
     $heroWallpaper = query_latest_wallpaper();
-    $wallpapers    = query_all_wallpapers();
+    // 默认页照片墙：最近 30 张（按日期倒序 LIMIT）
+    $wallpapers    = query_latest_n_wallpapers(30);
     $pageTitle     = 'Bing 每日壁纸 Dashboard';
 }
 
@@ -246,7 +247,9 @@ a { color: inherit; text-decoration: none; }
 <!-- 照片墙 -->
 <section class="wall">
     <h2>
-        <?= $isMonth ? htmlspecialchars(((int)$year) . '年' . ((int)$month) . '月壁纸') : '全部壁纸' ?>
+        <?= $isMonth
+            ? htmlspecialchars(((int)$year) . '年' . ((int)$month) . '月壁纸')
+            : '近期壁纸' ?>
         · 共 <?= count($wallpapers) ?> 张
     </h2>
     <div class="grid">
