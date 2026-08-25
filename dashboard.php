@@ -58,6 +58,8 @@ $wallpapersJS = array_map(static function ($w) {
         'file_1920x1080'   => $w['file_1920x1080'],
         'file_1366x768'    => $w['file_1366x768'],
         'file_uhd'         => $w['file_uhd'],
+        'full_intro'       => $w['full_intro'] ?? '',
+        'quick_fact'       => $w['quick_fact'] ?? '',
     ];
 }, $wallpapers);
 ?>
@@ -87,7 +89,7 @@ a { color: inherit; text-decoration: none; }
     background-color: #000;
     display: flex;
     align-items: flex-end;
-    padding: 60px 8% 80px;
+    padding: 50px 3% 50px;
 }
 .hero::after {
     content: '';
@@ -95,7 +97,66 @@ a { color: inherit; text-decoration: none; }
     background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.9) 100%);
     pointer-events: none;
 }
-.hero-info { position: relative; z-index: 1; max-width: 720px; text-shadow: 0 2px 12px rgba(0,0,0,0.85); }
+.hero‑container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 0.8fr 1.8fr;
+    gap: 20px;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.85);
+    align-items: end;
+}
+.hero.text-hidden .hero‑container {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+.tap-hint {
+    position:absolute;
+    z-index:2;
+    bottom:8px;
+    right:12px;
+    font-size:12px;
+    color:rgba(255,255,255,0.45);
+    text-shadow:0 1px 4px #000;
+}
+.hero-info { max-width: 720px; }
+.hero‑intro-block {
+    max-width: unset;
+}
+.hero‑full‑intro {
+    font-size: 15px;
+    line-height: 1.4;
+    margin-bottom: 10px;
+    color: #f0f0f0;
+}
+.hero‑full‑intro p {
+    text-align: justify;
+    text-indent: 2em;
+    margin: 0 0 0.5em 0;
+}
+.hero‑quick‑fact {
+    font-size: 14px;
+    color: #dddddd;
+    padding: 3px 14px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 5px;
+}
+@media (max-width: 768px) {
+    .hero {
+        padding: 40px 6% 60px;
+    }
+    .hero‑container {
+        grid-template-columns: 1fr;
+        gap:24px;
+        align-items: end;
+    }
+    /* 移动端隐藏完整介绍与小知识 */
+    .hero‑intro-block {
+        display: none !important;
+    }
+}
 .hero-title { font-size: clamp(22px, 4vw, 40px); font-weight: 700; margin-bottom: 6px; }
 .hero-subtitle { font-size: clamp(14px, 2vw, 20px); font-weight: 400; color: #ddd; margin-bottom: 14px; opacity: 0.92; }
 .hero-meta { font-size: 15px; color: #ddd; }
@@ -202,11 +263,50 @@ a { color: inherit; text-decoration: none; }
 .empty code { background: var(--card); padding: 3px 8px; border-radius: 4px; color: var(--accent); }
 
 @media (max-width: 768px) {
+    .hero‑container {
+        grid-template-columns: 1fr;
+        gap:24px;
+    }
     .modal-content { grid-template-columns: 1fr; max-height: 95vh; }
     .modal-img { max-height: 50vh; min-height: 200px; }
     .modal-info { padding: 20px; max-height: none; border-left: none; border-top: 1px solid var(--border); }
     .hero { padding: 40px 6% 60px; }
     .wall, .months { padding-left: 4%; padding-right: 4%; }
+}
+.btn-story {
+    width:100%;
+    padding:10px 14px;
+    margin-bottom:12px;
+    background-color: #252525;
+    color:#fff;
+    border:1px solid var(--border);
+    border-radius:6px;
+    cursor:pointer;
+    font-size:14px;
+}
+.btn-story:hover {
+    background-color:#333;
+}
+.modal-story-wrap {
+    margin-bottom:14px;
+    border-top:1px solid var(--border);
+    padding-top:14px;
+}
+.modal-full-intro p {
+    font-size:14px;
+    line-height:1.7;
+    text-align:justify;
+    text-indent:2em;
+    margin:0 0 0.7em 0;
+    color:#eee;
+}
+.modal-quick-fact {
+    margin-top:12px;
+    font-size:13px;
+    padding:8px 12px;
+    background:rgba(255,255,255,0.07);
+    border-radius:6px;
+    color:#ddd;
 }
 </style>
 </head>
@@ -218,27 +318,53 @@ a { color: inherit; text-decoration: none; }
     <p>请等待 <code>daily_download.php</code> 下次执行，<br>壁纸元数据会在下载时自动写入数据库。</p>
 </section>
 <?php else: ?>
-
-<!-- Hero 区：满屏壁纸 + 左下角信息 -->
-<section class="hero" style="background-image:url('<?= htmlspecialchars(wallpaper_hero_url($heroWallpaper, $cacheBase)) ?>')">
-    <div class="hero-info">
-        <h1 class="hero-title"><?= htmlspecialchars($heroWallpaper['title'] ?: ($heroWallpaper['description_web'] ?? $heroWallpaper['description'])) ?></h1>
-        <?php
-        $heroSub = $heroWallpaper['description_web'] ?? $heroWallpaper['description'];
-        $heroTitleVal = $heroWallpaper['title'] ?: $heroSub;
-        if ($heroSub !== '' && $heroSub !== $heroTitleVal):
-        ?>
-            <p class="hero-subtitle"><?= htmlspecialchars($heroSub) ?></p>
-        <?php endif; ?>
-        <div class="hero-meta">
-            <p><?= htmlspecialchars(format_date_chinese($heroWallpaper['date'])) ?></p>
-            <?php if (!empty($heroWallpaper['author'])): ?>
-                <p>作者：<?= htmlspecialchars($heroWallpaper['author']) ?></p>
+<section id="heroWrap" class="hero" style="background-image:url('<?= htmlspecialchars(wallpaper_hero_url($heroWallpaper, $cacheBase)) ?>')">
+    <div class="hero‑container">
+        <div class="hero-info">
+            <h1 class="hero-title"><?= htmlspecialchars($heroWallpaper['title'] ?: ($heroWallpaper['description_web'] ?? $heroWallpaper['description'])) ?></h1>
+            <?php
+            $heroSub = $heroWallpaper['description_web'] ?? $heroWallpaper['description'];
+            $heroTitleVal = $heroWallpaper['title'] ?: $heroSub;
+            if ($heroSub !== '' && $heroSub !== $heroTitleVal):
+            ?>
+                <p class="hero-subtitle"><?= htmlspecialchars($heroSub) ?></p>
+            <?php endif; ?>
+            <div class="hero-meta">
+                <p><?= htmlspecialchars(format_date_chinese($heroWallpaper['date'])) ?></p>
+                <?php if (!empty($heroWallpaper['author'])): ?>
+                    <p>作者：<?= htmlspecialchars($heroWallpaper['author']) ?></p>
+                <?php endif; ?>
+            </div>
+            <?php $heroCr = $heroWallpaper['copyright_notice'] ?: $heroWallpaper['raw_copyright']; ?>
+            <?php if ($heroCr !== ''): ?>
+                <p class="hero-copyright"><?= htmlspecialchars($heroCr) ?></p>
             <?php endif; ?>
         </div>
-        <?php $heroCr = $heroWallpaper['copyright_notice'] ?: $heroWallpaper['raw_copyright']; ?>
-        <?php if ($heroCr !== ''): ?>
-            <p class="hero-copyright"><?= htmlspecialchars($heroCr) ?></p>
+        <?php if (!empty($heroWallpaper['full_intro']) || !empty($heroWallpaper['quick_fact'])): ?>
+        <div class="hero‑intro-block">
+            <?php if (!empty($heroWallpaper['full_intro'])): ?>
+            <div class="hero‑full‑intro">
+                <?php
+                $raw = $heroWallpaper['full_intro'];
+                $paragraphs = explode("\n", $raw);
+                foreach ($paragraphs as $para) {
+                    $para = trim($para);
+                    if ($para === '') {
+                        continue;
+                    }
+                    $esc = htmlspecialchars($para);
+                    echo "<p>{$esc}</p>";
+                }
+                ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($heroWallpaper['quick_fact'])): ?>
+            <div class="hero‑quick‑fact">
+                小知识：<?= htmlspecialchars($heroWallpaper['quick_fact']) ?>
+            </div>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
     </div>
     <div class="scroll-hint">↓ 滑动浏览</div>
@@ -268,7 +394,6 @@ a { color: inherit; text-decoration: none; }
         <?php endforeach; ?>
     </div>
 </section>
-
 <?php endif; ?>
 
 <!-- 月份导航 -->
@@ -304,6 +429,11 @@ a { color: inherit; text-decoration: none; }
                 <div class="meta-row" style="margin-bottom:4px;"><span class="meta-label">关键词</span></div>
                 <div class="keywords" id="modalKeywords"></div>
             </div>
+            <button id="btnStory" class="btn-story">图片故事</button>
+            <div id="modalStoryWrap" class="modal-story-wrap" style="display:none;">
+                <div id="modalFullIntro" class="modal-full-intro"></div>
+                <div id="modalQuickFact" class="modal-quick-fact"></div>
+            </div>
             <div class="modal-downloads">
                 <a class="btn-dl" id="dl1080p" href="#" download>下载 1080P · 1920×1080
                     <small>JPG · 约 500 KB</small>
@@ -320,7 +450,6 @@ a { color: inherit; text-decoration: none; }
 <script>
 const BASE = <?= json_encode($baseUrl, JSON_UNESCAPED_SLASHES) ?>;
 const WALLPAPERS = <?= json_encode(array_values($wallpapersJS), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-
 const modal            = document.getElementById('modal');
 const modalImg         = document.getElementById('modalImg');
 const modalTitle       = document.getElementById('modalTitle');
@@ -332,7 +461,10 @@ const modalKeywordsWrap= document.getElementById('modalKeywordsWrap');
 const modalKeywords    = document.getElementById('modalKeywords');
 const dl1080p          = document.getElementById('dl1080p');
 const dl4k             = document.getElementById('dl4k');
-
+const btnStory         = document.getElementById('btnStory');
+const modalStoryWrap   = document.getElementById('modalStoryWrap');
+const modalFullIntro   = document.getElementById('modalFullIntro');
+const modalQuickFact   = document.getElementById('modalQuickFact');
 function formatDateCN(date) {
     const m = /^(\d{4})(\d{2})(\d{2})$/.exec(date);
     if (!m) return date;
@@ -346,7 +478,6 @@ function cacheUrl(file) {
 function openModal(date) {
     const w = WALLPAPERS.find(x => x.date === date);
     if (!w) return;
-
     const sub = w.description_web || w.description || '';
     modalImg.src = cacheUrl(w.file_1920x1080 || w.file_1366x768);
     modalImg.alt = w.title || sub || '';
@@ -355,7 +486,6 @@ function openModal(date) {
     modalAuthor.textContent  = w.author || '—';
     modalCopyright.textContent = w.copyright_notice || w.raw_copyright || '';
     modalDesc.textContent    = sub;
-
     modalKeywords.innerHTML = '';
     if (Array.isArray(w.keywords) && w.keywords.length > 0) {
         modalKeywordsWrap.style.display = '';
@@ -367,11 +497,27 @@ function openModal(date) {
     } else {
         modalKeywordsWrap.style.display = 'none';
     }
-
+    modalFullIntro.innerHTML = '';
+    modalQuickFact.textContent = '';
+    const fi = w.full_intro || '';
+    const qf = w.quick_fact || '';
+    if(fi){
+        const lines = fi.split("\n");
+        lines.forEach(line=>{
+            const t = line.trim();
+            if(!t) return;
+            const p = document.createElement('p');
+            p.textContent = t;
+            modalFullIntro.appendChild(p);
+        });
+    }
+    if(qf){
+        modalQuickFact.textContent = "小知识：" + qf;
+    }
+    modalStoryWrap.style.display = 'none';
     const dlBase = 'download.php?d=' + encodeURIComponent(w.date) + '&r=';
     dl1080p.href = dlBase + '1920x1080';
     dl4k.href    = dlBase + 'uhd';
-
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -381,6 +527,8 @@ function closeModal() {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     modalImg.src = '';
+    modalFullIntro.innerHTML = '';
+    modalQuickFact.textContent = '';
     document.body.style.overflow = '';
 }
 
@@ -390,7 +538,19 @@ document.querySelectorAll('.card').forEach(card => {
 document.getElementById('modalClose').addEventListener('click', closeModal);
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
+const heroWrap = document.getElementById('heroWrap');
+if(heroWrap){
+    heroWrap.addEventListener('click', function(e){
+        heroWrap.classList.toggle('text-hidden');
+    });
+}
+btnStory.addEventListener('click',function(){
+    if(modalStoryWrap.style.display === 'none'){
+        modalStoryWrap.style.display = 'block';
+    }else{
+        modalStoryWrap.style.display = 'none';
+    }
+});
 </script>
-
 </body>
 </html>

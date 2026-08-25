@@ -360,6 +360,8 @@ if (!function_exists('init_db')) {
             title TEXT,
             description TEXT,
             description_web TEXT,
+            full_intro TEXT,
+            quick_fact TEXT,
             raw_copyright TEXT,
             copyright_notice TEXT,
             author TEXT,
@@ -392,30 +394,35 @@ if (!function_exists('db')) {
 }
 
 if (!function_exists('save_wallpaper_record')) {
-    // 将 Bing 图片元数据写入/更新到 DB（INSERT OR REPLACE）
-    // $img 参数为 Bing API 返回的 images[0] 元素
-    function save_wallpaper_record(array $img): bool
+    function save_wallpaper_record(array $img, string $fullIntro = '', string $quickFact = '', string $backstageUrl = ''): bool
     {
         $p        = parse_bing_metadata($img);
-        $date     = date('Ymd');
+        $endDateRaw = $img['enddate'] ?? '';
+        if ($endDateRaw && preg_match('/^\d{8}$/', $endDateRaw)) {
+            $date = $endDateRaw;
+        }else{
+            $date = date('Ymd');
+        }
+
         $config   = bing_config();
         $prefix   = $config['cache_filename_prefix'];
-
         $files = [];
         foreach (array_keys($config['resolutions']) as $res) {
             $files[$res] = $prefix . '.' . $date . '.' . $res . '.jpg';
         }
-
         $stmt = db()->prepare("INSERT OR REPLACE INTO wallpapers
-            (date, bing_enddate, title, description, description_web, raw_copyright, copyright_notice, author, urlbase,
+            (date, bing_enddate, title, description, description_web, full_intro, quick_fact, backstage_url, raw_copyright, copyright_notice, author, urlbase,
              file_1920x1080, file_1366x768, file_1080x1920, file_uhd, keywords, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         return $stmt->execute([
             $date,
             (string)($img['enddate'] ?? ''),
             $p['title'],
             $p['description'],
             $p['description_web'],
+            $fullIntro,
+            $quickFact,
+            $backstageUrl,
             $p['raw_copyright'],
             $p['copyright_notice'],
             $p['author'],
@@ -502,5 +509,100 @@ if (!function_exists('query_latest_n_wallpapers')) {
         $stmt = db()->prepare("SELECT * FROM wallpapers ORDER BY date DESC LIMIT ?");
         $stmt->execute([$limit]);
         return $stmt->fetchAll();
+    }
+}
+
+function fetch_bing_full_intro(string $backstageUrl, array $apiModelRaw): string
+{
+    $config = bing_config();
+    $pythonBin  = $config['python_bin'] ?? '/usr/bin/python3';
+    $scriptPath = __DIR__ . '/full_intro.py';
+    $timeoutSec = 45;
+
+    if (!file_exists($scriptPath)) {
+        error_log('fetch_bing_full_intro: full_intro.py 文件不存在');
+        return '';
+    }
+
+    $escapedUrl = escapeshellarg($backstageUrl);
+    $cmd = sprintf(
+        '%s %s %s 2>&1',
+        escapeshellarg($pythonBin),
+        escapeshellarg($scriptPath),
+        $escapedUrl
+    );
+
+    $process = proc_open(
+        $cmd,
+        [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ],
+        $pipes
+    );
+
+    if (!is_resource($process)) {
+        error_log('fetch_bing_full_intro: proc_open 创建进程失败');
+        return '';
+    }
+
+    fclose($pipes[0]);
+    stream_set_blocking($pipes[1], true);
+    stream_set_blocking($pipes[2], true);
+
+    $startTime = time();
+    while (proc_get_status($process)['running']) {
+        usleep(200000);
+        if ((time() - $startTime) > $timeoutSec) {
+            proc_terminate($process, 9);
+            proc_close($process);
+            error_log("fetch_bing_full_intro: 执行超时 url={$backstageUrl}");
+            return '';
+        }
+    }
+
+    $stdout = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    $retCode = proc_close($process);
+
+    if (!empty($stderr)) {
+        error_log("fetch_bing_full_intro stderr: {$stderr}");
+    }
+
+    $out  = trim((string)$stdout);
+    $json = json_decode($out, true);
+    if ($json && isset($json['ok']) && $json['ok'] === true && !empty($json['data'])) {
+        $rawHtml = trim($json['data']);
+        $text = preg_replace('#<br\s*/?>#i', "\n\n", $rawHtml);
+        $text = strip_tags($text);
+        $text = preg_replace('/\R{3,}/', "\n\n", $text);
+        return $text;
+    }
+    if ($json && !empty($json['error'])) {
+        error_log("fetch_bing_full_intro python error: " . $json['error']);
+    }
+    return '';
+}
+
+if (!function_exists('update_wallpaper_extra_fields')) {
+
+    function update_wallpaper_extra_fields(string $date, string $fullIntro, string $quickFact, string $backstageUrl): array
+    {
+        $pdo = db();
+        $stmt = $pdo->prepare("UPDATE wallpapers
+            SET full_intro = :fi, quick_fact = :qf, backstage_url = :bu
+            WHERE date = :date");
+        $ret = $stmt->execute([
+            ':fi'    => $fullIntro,
+            ':qf'    => $quickFact,
+            ':bu'    => $backstageUrl,
+            ':date'  => $date
+        ]);
+        $affected = $stmt->rowCount();
+        return [
+            'success' => $ret,
+            'affected_rows' => $affected
+        ];
     }
 }
