@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-// 获取基础 URL（自动处理根目录和子目录）
 $baseUrl = get_base_url();
 
-// 分辨率选项
 $resolutionOptions = [
     '1920x1080' => '1920×1080 (1080P 高清横版)',
     '1366x768'  => '1366×768 (笔记本横版)',
@@ -15,7 +13,6 @@ $resolutionOptions = [
     'uhd'       => 'UHD (超高清原图)',
 ];
 
-// 分辨率对应的 key（用于文件名）
 $resolutionKeys = [
     '1920x1080' => '1920x1080',
     '1366x768'  => '1366x768',
@@ -23,59 +20,48 @@ $resolutionKeys = [
     'uhd'       => 'uhd',
 ];
 
-// 模式选项：日期范围
 $rangeOptions = [
     'today'  => '今日壁纸',
     'random' => '随机历史壁纸（由本站缓存随机输出）',
 ];
 
-// 访问形式选项（output type）
 $outputOptions = [
     'cdn' => '本站CDN（使用阿里云ESA全球加速）',
     '302' => 'Bing官方直链（与Bing官方访问速度一致）',
 ];
 
-// 处理表单提交，生成 URL
-$generatedUrl = '';
-$previewUrl   = '';
-$copiedScript = '';
+$generatedUrl   = '';
+$previewUrl     = '';
+$copiedScript   = '';
 
-// 所有默认值统一声明（GET / POST 都走同一套默认）
+// ===== 可修改：URL 拼接器的默认值 =====
 $defaultRange      = 'today';
-$defaultOutput     = 'cdn';      // 默认：本地 CDN，与用户期望一致
+$defaultOutput     = 'cdn';
 $defaultResolution = '1920x1080';
+// ====================================
 
-// 读当前值：POST 有就用 POST，否则走默认
 $range      = $_POST['range']      ?? $defaultRange;
 $output     = $_POST['output']     ?? $defaultOutput;
 $resolution = $_POST['resolution'] ?? $defaultResolution;
 
-// 白名单校验，防止前端被改出非法值
-if (!array_key_exists($range, $rangeOptions))               { $range      = $defaultRange; }
-if (!array_key_exists($output, $outputOptions))             { $output     = $defaultOutput; }
-if (!array_key_exists($resolution, $resolutionOptions))     { $resolution = $defaultResolution; }
+if (!array_key_exists($range, $rangeOptions))           { $range      = $defaultRange; }
+if (!array_key_exists($output, $outputOptions))         { $output     = $defaultOutput; }
+if (!array_key_exists($resolution, $resolutionOptions)) { $resolution = $defaultResolution; }
 
 $resKey  = $resolutionKeys[$resolution] ?? '1920x1080';
 $fileKey = ($resKey === 'm' ? 'm' : $resKey);
 
-// 根据选项组合文件名（GET 也会生成一个默认 URL，保证页面一打开就显示）
 $fileName = match (true) {
-    // 随机：从本地 cache 随机（全历史，不限天数），只有直输模式
-    $range === 'random' => 'rand_' . $fileKey . '.php',
-
-    // 今日 - 本地 CDN：首次访问会把图片写入 cache/，下次就从本地读
+    $range === 'random'               => 'rand_' . $fileKey . '.php',
     $range === 'today' && $output === 'cdn' => $resKey . '.php',
-
-    // 今日 - 官方直链：302 跳 Bing 官方
-    default => $resKey . '_302.php',
+    default                           => $resKey . '_302.php',
 };
 
 $generatedUrl = $baseUrl . $fileName;
 
-// 预览图统一用"会输出图片的脚本"（避免 302 防盗链/跨域问题）
 $previewFile = match ($range) {
     'random' => 'rand_' . $fileKey . '.php',
-    default  => $resKey . '.php',     // 今日走本地 CDN 脚本
+    default  => $resKey . '.php',
 };
 $previewUrl = $baseUrl . $previewFile;
 ?>
@@ -84,7 +70,7 @@ $previewUrl = $baseUrl . $previewFile;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bing 每日壁纸 API 代理服务</title>
+    <title>Bing 每日壁纸 代理服务</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -101,7 +87,6 @@ $previewUrl = $baseUrl . $previewFile;
             position: relative;
         }
         body::before {
-            /* 给页面背景增加一层淡淡的暗色蒙版，保证前景文字可读 */
             content: '';
             position: fixed;
             inset: 0;
@@ -111,7 +96,7 @@ $previewUrl = $baseUrl . $previewFile;
         .container {
             max-width: 960px;
             margin: 0 auto;
-            background: #fff;
+            background: rgba(255, 255, 255, 0.8);
             border-radius: 16px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2);
             overflow: hidden;
@@ -119,7 +104,16 @@ $previewUrl = $baseUrl . $previewFile;
         .header {
             background: linear-gradient(135deg, #0078d4 0%, #50a7f2 100%);
             color: #fff;
-            padding: 40px 35px;
+            padding: 32px 35px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 28px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-text {
+            flex: 1 1 360px;
+            min-width: 0;
         }
         .header h1 {
             font-size: 28px;
@@ -129,6 +123,76 @@ $previewUrl = $baseUrl . $previewFile;
         .header p {
             opacity: 0.92;
             font-size: 15px;
+            margin: 0;
+        }
+
+        /* ===== header 右侧按钮组（上下两个） ===== */
+        .header-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .header-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 18px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 10px;
+            color: #fff;
+            text-decoration: none;
+            transition: background 0.18s, transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+            backdrop-filter: blur(6px);
+            min-width: 230px;
+        }
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.24);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+        }
+        .header-btn-icon {
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
+        }
+        .header-btn-body {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.25;
+            min-width: 0;
+        }
+        .header-btn-title {
+            font-size: 14.5px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .header-btn-sub {
+            font-size: 11.5px;
+            opacity: 0.88;
+            margin-top: 2px;
+            white-space: nowrap;
+        }
+        /* 主操作按钮：更亮的底色（客户端下载） */
+        .header-btn.primary {
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.55);
+        }
+        .header-btn.primary:hover {
+            background: rgba(255, 255, 255, 0.32);
+        }
+        .size-badge {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            background: rgba(255, 255, 255, 0.28);
+            border-radius: 10px;
+            font-size: 10.5px;
+            font-weight: 500;
+            vertical-align: 1px;
         }
         .content {
             padding: 35px;
@@ -160,7 +224,7 @@ $previewUrl = $baseUrl . $previewFile;
             font-size: 13px;
         }
         pre {
-            background: #f4f6fa;
+            background: rgba(255, 255, 255, 0.7);
             padding: 15px 18px;
             border-radius: 8px;
             overflow-x: auto;
@@ -176,7 +240,7 @@ $previewUrl = $baseUrl . $previewFile;
 
         /* ========== 表单 ========== */
         .generator {
-            background: #f8faff;
+            background: rgba(255, 255, 255, 0.7);
             border: 1px solid #e0e7ff;
             border-radius: 12px;
             padding: 25px;
@@ -222,7 +286,7 @@ $previewUrl = $baseUrl . $previewFile;
             background: #fff;
             border: 1px solid #e0e7ff;
             border-radius: 10px;
-            display: block;   /* 移除按钮后，结果区默认直接显示 */
+            display: block;
             animation: fadeIn 0.35s ease;
         }
         @keyframes fadeIn {
@@ -300,17 +364,18 @@ $previewUrl = $baseUrl . $previewFile;
             margin-top: 12px;
         }
         .file-card {
-            border: 1px solid #e5e9f2;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid #7ea1f2;
             border-radius: 8px;
             padding: 14px;
             transition: border 0.15s, box-shadow 0.15s;
         }
         .file-card:hover {
             border-color: #0078d4;
-            box-shadow: 0 4px 14px rgba(0,120,212,0.1);
+            box-shadow: 0 4px 14px rgba(0, 120, 212, 0.75);
         }
         .file-card a {
-            color: #0078d4;
+            color: #1198ff;
             text-decoration: none;
             font-weight: 600;
             font-family: "Consolas", monospace;
@@ -356,6 +421,103 @@ $previewUrl = $baseUrl . $previewFile;
             border-left-color: #2196f3;
         }
 
+        /* ========== 入口卡片行：壁纸墙 + 客户端下载 ========== */
+        .entry-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .entry-card {
+            flex: 1 1 280px;
+            min-width: 260px;
+            position: relative;
+            border-radius: 14px;
+            padding: 24px 26px 24px 96px;
+            cursor: pointer;
+            overflow: hidden;
+            transition: transform 0.22s cubic-bezier(.2,.8,.2,1), box-shadow 0.22s, border-color 0.22s;
+            border: 1px solid rgba(255,255,255,0.6);
+            background: rgba(255,255,255,0.75);
+            color: inherit;
+            text-decoration: none;
+            display: block;
+        }
+        .entry-card::before {
+            /* 左侧图标色块 */
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .entry-card-wall::before {
+            background: linear-gradient(160deg, #0078d4 0%, #2ea4ff 100%);
+        }
+        .entry-card-win::before {
+            background: linear-gradient(160deg, #00ADEF 0%, #5cc6ff 100%);
+        }
+        .entry-card-icon {
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            z-index: 1;
+            filter: drop-shadow(0 2px 6px rgba(0,0,0,0.2));
+        }
+        .entry-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 120, 212, 0.22);
+            border-color: rgba(0, 120, 212, 0.35);
+        }
+        .entry-card h2 {
+            font-size: 18px;
+            color: #0f3b6d;
+            margin: 0 0 6px;
+            border: none;
+            padding: 0;
+            letter-spacing: 0.5px;
+        }
+        .entry-card p {
+            font-size: 13.5px;
+            color: #666;
+            margin: 0;
+            line-height: 1.55;
+        }
+        .entry-card .entry-action {
+            display: inline-block;
+            margin-top: 12px;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #0078d4;
+        }
+        .entry-card .entry-action::after {
+            content: ' →';
+            transition: transform 0.18s;
+            display: inline-block;
+        }
+        .entry-card:hover .entry-action::after {
+            transform: translateX(4px);
+        }
+        /* 下载大小小徽章 */
+        .entry-card .size-tag {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 7px;
+            background: #e8f0fe;
+            color: #1a73e8;
+            font-size: 11px;
+            border-radius: 10px;
+            vertical-align: middle;
+            font-weight: 500;
+        }
+
         .footer {
             text-align: center;
             padding: 20px 35px 30px;
@@ -373,8 +535,35 @@ $previewUrl = $baseUrl . $previewFile;
 <div class="container">
     <!-- 头部 -->
     <div class="header">
-        <h1>🌄 Bing 每日壁纸 API 代理服务</h1>
-        <p>基于 Bing 首页每日壁纸的开源 API，支持多种分辨率、302 直链跳转、历史随机等功能。</p>
+        <div class="header-text">
+            <h1>🌄 Bing 每日壁纸 代理服务</h1>
+            <p>基于 Bing 首页每日壁纸的开源 API，支持多种分辨率、302 直链跳转、历史随机等功能。</p>
+        </div>
+        <div class="header-actions">
+            <!-- ① 壁纸墙 -->
+            <a class="header-btn" href="dashboard.php" target="_blank" rel="noopener" title="浏览服务器中保存的全部历史壁纸">
+                <svg class="header-btn-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <rect x="5" y="9" width="54" height="46" rx="5" fill="#ffffff" opacity="0.96"/>
+                    <circle cx="18" cy="22" r="3.8" fill="#ffb74d"/>
+                    <path d="M5 45l13-11 10 9 9-7 22 10v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4z" fill="#81d4fa"/>
+                    <rect x="5" y="9" width="54" height="46" rx="5" stroke="#ffffff" stroke-width="2" fill="none"/>
+                </svg>
+                <div class="header-btn-body">
+                    <div class="header-btn-title">查看壁纸墙</div>
+                    <div class="header-btn-sub">浏览服务器保存的历史壁纸</div>
+                </div>
+            </a>
+            <!-- ② Windows 客户端（主操作） -->
+            <a class="header-btn primary" href="https://r2.tianlingzi.ccwu.cc/BingWallpaper.exe" title="立即下载 Windows 桌面客户端">
+                <svg class="header-btn-icon" viewBox="-0.5 0 257 257" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M0 36.357L104.62 22.11l.045 100.914-104.57.595L0 36.358zm104.57 98.293l.08 101.002L.081 221.275l-.006-87.302 104.494.677zm12.682-114.405L255.968 0v121.74l-138.716 1.1V20.246zM256 135.6l-.033 121.191-138.716-19.578-.194-101.84L256 135.6z" fill="#ffffff"/>
+                </svg>
+                <div class="header-btn-body">
+                    <div class="header-btn-title">下载客户端<span class="size-badge">绿色 · 17MB</span></div>
+                    <div class="header-btn-sub">Windows · 每日壁纸 · 随机壁纸</div>
+                </div>
+            </a>
+        </div>
     </div>
 
     <div class="content">
@@ -397,14 +586,15 @@ $previewUrl = $baseUrl . $previewFile;
                 <li>
                     <strong>🖥️ 今日壁纸 · 本站 CDN 模式</strong>
                     <ul>
-                        <li>由本站先缓存壁纸，再提供壁纸服务</li>
-                        <li>本站使用阿里云ESA提供全球加速服务</li>
+                        <li>由本站使用阿里云 EAS 边缘加速提供全球访问</li>
+                        <li>本项目本地输出模式与其他项目不同，本项目是缓存到本地再从本地读取，其他项目大多是是作为桥梁访问bing。</li>
+                        <li>使用可预测性命名，最大限度使用各级缓存与加速，加快访问速度，降低流量损耗。</li>
                     </ul>
                 </li>
                 <li>
                     <strong>🎲 随机历史壁纸</strong>
                     <ul>
-                        <li>从本站的历史缓存中随机输出符合的壁纸</li>
+                        <li>从本站的历史缓存中随机输出符合的壁纸（默认是过去30天内的壁纸）</li>
                     </ul>
                 </li>
             </ol>
@@ -415,7 +605,7 @@ $previewUrl = $baseUrl . $previewFile;
 &lt;img src="<?= htmlspecialchars($baseUrl) ?>1920x1080_302.php" alt="Bing 每日壁纸" /&gt;
 
 &lt;!-- Markdown 示例 --&gt;
-![Bing 壁纸](<?= htmlspecialchars($baseUrl) ?>uhd_302.php)</code></pre>
+![Bing 壁纸](<?= htmlspecialchars($baseUrl) ?>uhd.php?d=<?= htmlspecialchars(date('Ymd')) ?>)</code></pre>
         </div>
 
         <!-- URL 生成工具 -->
@@ -525,7 +715,7 @@ $previewUrl = $baseUrl . $previewFile;
                         <a href="<?= htmlspecialchars($baseUrl . 'rand_' . $fileKey . '.php') ?>" target="_blank" rel="noopener">
                             rand_<?= htmlspecialchars($fileKey) ?>.php
                         </a>
-                        <small><?= htmlspecialchars($label) ?><br><span class="tag tag-local">本地随机</span></small>
+                        <small><?= htmlspecialchars($label) ?><br><span class="tag tag-local">本地随机（30天）</span></small>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -534,7 +724,7 @@ $previewUrl = $baseUrl . $previewFile;
 
     <div class="footer">
          Powered by <a href="https://www.tianlingzi.top" target="_blank" rel="noopener"
-                        style="color:#fff;text-decoration:none;border-bottom:1px solid rgba(255,255,255,0.5);">灵感小屋</a>
+                        style="color:#3362FD;text-decoration:none;">灵感小屋</a>
     </div>
 </div>
 
