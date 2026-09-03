@@ -115,6 +115,13 @@ def build_image_url(date_str, resolution):
     return f"{CACHE_BASE}/{CACHE_NAME_FMT.format(date=date_str, res=resolution)}"
 
 
+def get_daily_target_date(now):
+    """每日模式的目标日期：00:15 前视为昨天（防止服务器未更新），00:15 后视为今天"""
+    if now.hour == 0 and now.minute < 15:
+        return (now - timedelta(days=1)).strftime("%Y%m%d")
+    return now.strftime("%Y%m%d")
+
+
 def random_past_date(max_years=2):
     """
     随机生成一个"过去"的有效日期（今年或去年，不会是今天之后）。
@@ -648,36 +655,34 @@ class BingWallpaperApp:
                 return False, "设置壁纸失败"
         return False, f"无法获取壁纸: {date_str}"
 
-    def do_update_wallpaper(self):
-        """每日/指定日期模式：更新壁纸"""
+    def do_daily_update(self):
+        """每日模式：直接构造 URL 下载（跳过 JSON API），00:15 前用昨天，之后用今天"""
         with self._lock:
             config = dict(self.config)
         resolution = config["resolution"]
-        mode = config["mode"]
+        now = datetime.now()
+        target = get_daily_target_date(now)
+        image_url = build_image_url(target, resolution)
+        success, msg = self._apply_wallpaper(target, image_url, resolution)
+        return success, msg, target
 
-        if mode == MODE_DAILY:
-            wp = fetch_wallpaper("latest")
-            if not wp:
-                return False, "无法获取当日壁纸"
-            date_str = wp.get("date", datetime.now().strftime("%Y%m%d"))
-            image_url = wp.get("images", {}).get(resolution)
-            if not image_url:
-                return False, f"当日壁纸无 {RESOLUTION_LABELS.get(resolution, resolution)} 分辨率"
-            return self._apply_wallpaper(date_str, image_url, resolution)
+    def do_update_wallpaper(self):
+        """指定日期模式：通过 API 获取指定日期壁纸，返回 (success, msg, date_str)"""
+        with self._lock:
+            config = dict(self.config)
+        resolution = config["resolution"]
 
-        elif mode == MODE_DATE:
-            date_str = config.get("specific_date", "")
-            if not date_str:
-                return False, "未指定日期"
-            wp = fetch_wallpaper("date", date_str)
-            if not wp:
-                return False, f"无法获取 {date_str} 的壁纸"
-            image_url = wp.get("images", {}).get(resolution)
-            if not image_url:
-                return False, f"{date_str} 壁纸无此分辨率"
-            return self._apply_wallpaper(date_str, image_url, resolution)
-
-        return False, "未知模式"
+        date_str = config.get("specific_date", "")
+        if not date_str:
+            return False, "未指定日期", ""
+        wp = fetch_wallpaper("date", date_str)
+        if not wp:
+            return False, f"无法获取 {date_str} 的壁纸", date_str
+        image_url = wp.get("images", {}).get(resolution)
+        if not image_url:
+            return False, f"{date_str} 壁纸无此分辨率", date_str
+        ok, msg = self._apply_wallpaper(date_str, image_url, resolution)
+        return ok, msg, date_str
 
     def do_rotate_wallpaper(self):
         """
@@ -752,12 +757,11 @@ class BingWallpaperApp:
                 with self._lock:
                     self._last_switch_time = datetime.now()
         elif mode == MODE_DAILY:
-            success, msg = self.do_update_wallpaper()
+            success, msg, wp_date = self.do_daily_update()
             if success:
-                today = datetime.now().strftime("%Y%m%d")
-                self.update_config(**{"_daily_applied_date": today})
+                self.update_config(**{"_daily_applied_date": wp_date})
         elif mode == MODE_DATE:
-            success, msg = self.do_update_wallpaper()
+            success, msg, wp_date = self.do_update_wallpaper()
             if success:
                 with self._lock:
                     target = self.config.get("specific_date", "")
@@ -814,15 +818,15 @@ class BingWallpaperApp:
 
         # —— 每日当日模式 ——
         if mode == MODE_DAILY:
-            today = now.strftime("%Y%m%d")
+            target = get_daily_target_date(now)
             applied = config.get("_daily_applied_date", "")
-            if applied != today:
-                # 今日尚未成功应用，重试（最多每 60 秒一次）
-                success, msg = self.do_update_wallpaper()
+            if applied != target:
+                # 直接构造 URL 下载，跳过 JSON API（与轮巡机制一致）
+                success, msg, wp_date = self.do_daily_update()
                 if success:
-                    # 持久化，确保进程重启/休眠唤醒后不会重复应用，也不会第二天跳过
-                    self.update_config(**{"_daily_applied_date": today})
+                    self.update_config(**{"_daily_applied_date": target})
                     self.notify(msg)
+                # 下载失败（如 00:15 时服务端偶发延迟）→ 不标记，60 秒后自动重试
 
         # —— 指定日期模式 ——
         elif mode == MODE_DATE:
@@ -830,7 +834,7 @@ class BingWallpaperApp:
             applied_key = config.get("_date_applied_key", "")
             current_key = f"date:{target}"
             if target and applied_key != current_key:
-                success, msg = self.do_update_wallpaper()
+                success, msg, _ = self.do_update_wallpaper()
                 if success:
                     self.update_config(**{"_date_applied_key": current_key})
                     self.notify(msg)

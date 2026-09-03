@@ -1,8 +1,3 @@
-<<<<<<< HEAD
 client/__pycache__
+client/build
 data/
-=======
-# SQLite 数据库与运行时数据（按需保留本地，不入库）
-/data/
-/windows-app
->>>>>>> b2632ed2ba0fa46807251d39c902c110d69fa72d
