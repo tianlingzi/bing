@@ -865,7 +865,13 @@ class BingWallpaperApp:
         self.update_config(resolution=resolution)
 
     def on_set_mode(self, mode):
-        self.update_config(mode=mode)
+        # 切换模式时清除目标模式的"已应用"标记，确保切回时立即触发更新
+        if mode == MODE_DAILY:
+            self.update_config(mode=mode, _daily_applied_date="")
+        elif mode == MODE_DATE:
+            self.update_config(mode=mode, _date_applied_key="")
+        else:
+            self.update_config(mode=mode)
 
     def on_set_date(self, date_str):
         self.update_config(specific_date=date_str, mode=MODE_DATE)
