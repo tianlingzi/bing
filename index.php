@@ -535,16 +535,38 @@ $previewUrl = $baseUrl . $previewFile;
 <div class="container">
     <!-- 头部 -->
     <div class="header">
-        <h1>🌄 Bing 每日壁纸 API 代理服务</h1>
-        <p>基于 Bing 首页每日壁纸的开源 API，支持多种分辨率、302 直链跳转、历史随机等功能。</p>
+        <div class="header-text">
+            <h1>🌄 Bing 每日壁纸 代理服务</h1>
+            <p>基于 Bing 首页每日壁纸的开源 API，支持多种分辨率、302 直链跳转、历史随机等功能。</p>
+        </div>
+        <div class="header-actions">
+            <!-- ① 壁纸墙 -->
+            <a class="header-btn" href="dashboard.php" target="_blank" rel="noopener" title="浏览服务器中保存的全部历史壁纸">
+                <svg class="header-btn-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <rect x="5" y="9" width="54" height="46" rx="5" fill="#ffffff" opacity="0.96"/>
+                    <circle cx="18" cy="22" r="3.8" fill="#ffb74d"/>
+                    <path d="M5 45l13-11 10 9 9-7 22 10v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4z" fill="#81d4fa"/>
+                    <rect x="5" y="9" width="54" height="46" rx="5" stroke="#ffffff" stroke-width="2" fill="none"/>
+                </svg>
+                <div class="header-btn-body">
+                    <div class="header-btn-title">查看壁纸墙</div>
+                    <div class="header-btn-sub">浏览服务器保存的历史壁纸</div>
+                </div>
+            </a>
+            <!-- ② Windows 客户端（主操作） -->
+            <a class="header-btn primary" href="https://r2.tianlingzi.ccwu.cc/BingWallpaper.exe" title="立即下载 Windows 桌面客户端">
+                <svg class="header-btn-icon" viewBox="-0.5 0 257 257" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <path d="M0 36.357L104.62 22.11l.045 100.914-104.57.595L0 36.358zm104.57 98.293l.08 101.002L.081 221.275l-.006-87.302 104.494.677zm12.682-114.405L255.968 0v121.74l-138.716 1.1V20.246zM256 135.6l-.033 121.191-138.716-19.578-.194-101.84L256 135.6z" fill="#ffffff"/>
+                </svg>
+                <div class="header-btn-body">
+                    <div class="header-btn-title">下载客户端<span class="size-badge">v2.1</span></div>
+                    <div class="header-btn-sub">Windows · 每日壁纸 · 随机壁纸</div>
+                </div>
+            </a>
+        </div>
     </div>
 
     <div class="content">
-
-        <div class="section" onclick="window.open('dashboard.php','_blank')" style="cursor: pointer;">
-            <h2>点此跳转壁纸墙</h2>
-            <p>查看服务器中保存的历史壁纸</p>
-        </div>
 
         <!-- 项目介绍与使用说明 -->
         <div class="section">

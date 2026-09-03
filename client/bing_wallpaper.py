@@ -69,8 +69,9 @@ INTERVAL_LABELS = {
     30: "30 分钟", 60: "1 小时", 180: "3 小时", 360: "6 小时",
 }
 
-# 缓存天数预设
-CACHE_DAYS_PRESETS = [1, 3, 7, 14, 30]
+# 缓存天数预设（0 = 永不清理）
+CACHE_DAYS_PRESETS = [7, 14, 30, 0]
+CACHE_DAYS_LABELS = {7: "7 天", 14: "14 天", 30: "30 天", 0: "永久"}
 
 
 # ==================== 配置管理 ====================
@@ -203,7 +204,9 @@ def get_cached_image(date_str, resolution):
 
 
 def clean_expired_cache(cache_days):
-    """清理过期缓存，返回清理数量"""
+    """清理过期缓存，返回清理数量。cache_days=0 表示永久不清理"""
+    if not cache_days or cache_days <= 0:
+        return 0
     if not os.path.exists(CACHE_DIR):
         return 0
     cutoff = datetime.now() - timedelta(days=cache_days)
@@ -605,6 +608,99 @@ def show_date_dialog(default_date=None):
     return v if isinstance(v, str) and len(v) == 8 else None
 
 
+def show_cache_days_dialog(default_days=7):
+    """
+    显示自定义缓存天数窗口（tkinter，表单风格，与自定义间隔对话框一致）：
+      - Spinbox（数值输入框，带上下箭头，0=永久不清理）
+      - 确定按钮含说明文字"0=永不清理"
+    返回 int 天数，取消返回 None。
+    """
+    import tkinter as tk
+    from tkinter import ttk
+    import queue
+
+    result_q = queue.Queue(maxsize=1)
+
+    def run_dialog():
+        try:
+            root = tk.Tk()
+        except Exception as e:
+            print(f"tkinter 初始化失败: {e}")
+            result_q.put(None)
+            return
+
+        try:
+            root.title("自定义缓存天数")
+            root.resizable(False, False)
+            root.attributes('-topmost', True)
+            root.attributes('-toolwindow', True)
+            w, h = 280, 140
+            sw = root.winfo_screenwidth()
+            sh = root.winfo_screenheight()
+            root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+            var_value = tk.StringVar(value=str(default_days))
+
+            frm = ttk.Frame(root, padding=10)
+            frm.pack(fill="both", expand=True)
+
+            ttk.Label(frm, text="天数：").grid(row=0, column=0, sticky="w", pady=4)
+            spin = tk.Spinbox(
+                frm, from_=0, to=365,
+                textvariable=var_value, width=10, justify="left",
+            )
+            spin.grid(row=0, column=1, sticky="we", pady=4)
+
+            ttk.Label(frm, text="（0 = 永不清理）").grid(
+                row=1, column=0, columnspan=2, sticky="w", pady=2
+            )
+
+            btns = ttk.Frame(frm)
+            btns.grid(row=2, column=0, columnspan=2, pady=(10, 0), sticky="we")
+
+            def on_ok(*_):
+                try:
+                    val = int(var_value.get())
+                except ValueError:
+                    return
+                if 0 <= val <= 365:
+                    result_q.put(val)
+                else:
+                    result_q.put(None)
+                root.destroy()
+
+            def on_cancel(*_):
+                result_q.put(None)
+                root.destroy()
+
+            ttk.Button(btns, text="确定", command=on_ok).pack(side="right", padx=4)
+            ttk.Button(btns, text="取消", command=on_cancel).pack(side="right", padx=4)
+
+            root.bind("<Return>", on_ok)
+            root.bind("<Escape>", on_cancel)
+            root.protocol("WM_DELETE_WINDOW", on_cancel)
+
+            root.mainloop()
+        except Exception as e:
+            print(f"缓存天数对话框错误: {e}")
+            try:
+                result_q.put_nowait(None)
+            except Exception:
+                pass
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    t = threading.Thread(target=run_dialog, daemon=True)
+    t.start()
+    t.join(timeout=300)
+    if result_q.empty():
+        return None
+    v = result_q.get()
+    return v if isinstance(v, int) else None
+
+
 # ==================== 主应用 ====================
 class BingWallpaperApp:
     def __init__(self):
@@ -895,8 +991,18 @@ class BingWallpaperApp:
 
     def on_set_cache_days(self, days):
         self.update_config(cache_days=days)
-        count = clean_expired_cache(days)
-        self.notify(f"已清理 {count} 张过期壁纸", "缓存清理")
+        if days == 0:
+            self.notify("已设为永久不清理", "缓存设置")
+        else:
+            count = clean_expired_cache(days)
+            self.notify(f"已设为 {days} 天，清理 {count} 张过期壁纸", "缓存设置")
+
+    def on_custom_cache_days(self):
+        with self._lock:
+            default_days = self.config.get("cache_days", 7)
+        days = show_cache_days_dialog(default_days)
+        if days is not None:
+            self.on_set_cache_days(days)
 
     def on_update_now(self):
         threading.Thread(target=self.do_update_now, daemon=True).start()
@@ -1040,13 +1146,25 @@ class BingWallpaperApp:
         # 缓存子菜单
         cache_items = [
             pystray.MenuItem(
-                f"保留 {d} 天",
+                CACHE_DAYS_LABELS[d],
                 self._cb(self.on_set_cache_days, d),
                 checked=lambda i, dd=d: self.config["cache_days"] == dd,
                 radio=True,
             )
             for d in CACHE_DAYS_PRESETS
         ]
+        # 自定义天数（不在预设中时显示当前值）
+        custom_cache_label = f"自定义: {self.config['cache_days']} 天"
+        if self.config["cache_days"] == 0:
+            custom_cache_label = "自定义: 永久"
+        cache_items.append(
+            pystray.MenuItem(
+                custom_cache_label,
+                lambda icon, item: self.on_custom_cache_days(),
+                checked=lambda i: self.config["cache_days"] not in CACHE_DAYS_PRESETS,
+                radio=True,
+            )
+        )
         cache_items.append(pystray.Menu.SEPARATOR)
         cache_items.append(
             pystray.MenuItem("立即清理缓存", lambda icon, item: self.do_clear_all_cache())
