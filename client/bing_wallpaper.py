@@ -204,24 +204,26 @@ def get_cached_image(date_str, resolution):
 
 
 def clean_expired_cache(cache_days):
-    """清理过期缓存，返回清理数量。cache_days=0 表示永久不清理"""
+    """清理过期缓存，返回清理数量。cache_days=0 表示永久不清理。
+    按文件下载时间（mtime）判断，而非文件名中的壁纸日期。"""
     if not cache_days or cache_days <= 0:
         return 0
     if not os.path.exists(CACHE_DIR):
         return 0
     cutoff = datetime.now() - timedelta(days=cache_days)
-    cutoff_str = cutoff.strftime("%Y%m%d")
+    cutoff_ts = cutoff.timestamp()
     count = 0
     for fname in os.listdir(CACHE_DIR):
         if not fname.endswith(".jpg"):
             continue
-        m = re.search(r'\.(\d{8})\.', fname)
-        if m and m.group(1) < cutoff_str:
-            try:
-                os.remove(os.path.join(CACHE_DIR, fname))
+        fpath = os.path.join(CACHE_DIR, fname)
+        try:
+            # 文件最后修改时间 = 下载完成时间
+            if os.path.getmtime(fpath) < cutoff_ts:
+                os.remove(fpath)
                 count += 1
-            except Exception:
-                pass
+        except Exception:
+            pass
     return count
 
 
