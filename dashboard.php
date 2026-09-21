@@ -25,6 +25,25 @@ if ($isMonth) {
 
 $months = query_all_months();
 
+// 支持通过 ?date=YYYYMMDD 直接打开指定日期的壁纸详情
+$dateParam    = (string)($_GET['date'] ?? '');
+$isDate       = preg_match('/^\d{8}$/', $dateParam);
+$autoOpenDate = '';
+if ($isDate) {
+    $dw = query_wallpaper_by_date($dateParam);
+    if ($dw !== null) {
+        // 若该日期不在当前列表里，补入 $wallpapers，使其进入 WALLPAPERS JS 数组供 openModal 查找
+        $exists = false;
+        foreach ($wallpapers as $w) {
+            if (($w['date'] ?? '') === $dw['date']) { $exists = true; break; }
+        }
+        if (!$exists) {
+            $wallpapers[] = $dw;
+        }
+        $autoOpenDate = $dateParam;
+    }
+}
+
 function format_date_chinese(string $date): string
 {
     if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $date, $m)) {
@@ -551,6 +570,12 @@ btnStory.addEventListener('click',function(){
         modalStoryWrap.style.display = 'none';
     }
 });
+
+// URL 含 ?date=YYYYMMDD 时自动打开对应日期的详情
+const autoOpenDate = <?= json_encode($autoOpenDate, JSON_UNESCAPED_SLASHES) ?>;
+if (autoOpenDate) {
+    openModal(autoOpenDate);
+}
 </script>
 
 <!-- 底部跳转链接 -->

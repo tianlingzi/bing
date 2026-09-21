@@ -39,7 +39,8 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 
 API_BASE = "https://www.tianlingzi.top/bing"
-WEBSITE_URL = "https://www.tianlingzi.top/bing/dashboard.php"
+WEBSITE_URL_BASE = "https://www.tianlingzi.top/bing"
+WEBSITE_URL = f"{WEBSITE_URL_BASE}/dashboard.php"
 # 远程图片直链前缀（固定命名，轮巡模式可直接构造 URL 下载，跳过 API 调用）
 CACHE_BASE = "https://www.tianlingzi.top/bing/cache"
 CACHE_NAME_FMT = "tianlingzi.top.{date}.{res}.jpg"
@@ -83,6 +84,7 @@ DEFAULT_CONFIG = {
     "cache_days": 7,
     "_daily_applied_date": "",   # 持久化：每日模式已应用的日期（防重启/休眠后状态丢失）
     "_date_applied_key": "",     # 持久化：指定日期模式已应用的标记
+    "_current_wallpaper_date": "", # 持久化：当前应用的壁纸日期，供"查看详情"使用
 }
 
 
@@ -718,6 +720,7 @@ class BingWallpaperApp:
         self._last_daily_key = None
         self._last_switch_time = None
         self._last_cache_clean = None
+        self._current_wallpaper_date = self.config.get("_current_wallpaper_date", "")
 
     # ---------- 配置变更 ----------
     def update_config(self, **kwargs):
@@ -734,6 +737,13 @@ class BingWallpaperApp:
             if self.icon:
                 self.icon.update_menu()
 
+    def _persist_wallpaper_date(self, date_str):
+        """持久化当前壁纸日期到 config，不触发调度器 poke"""
+        self._current_wallpaper_date = date_str
+        with self._lock:
+            self.config["_current_wallpaper_date"] = date_str
+            save_config(self.config)
+
     # ---------- 壁纸操作 ----------
     def _apply_wallpaper(self, date_str, image_url, resolution):
         """下载/使用缓存并设置壁纸（文件名与服务器一致）"""
@@ -741,14 +751,15 @@ class BingWallpaperApp:
         cached = get_cached_image(date_str, resolution)
         if cached:
             if set_wallpaper(cached):
+                self._persist_wallpaper_date(date_str)
                 return True, f"已设置壁纸（缓存）: {date_str}"
             return False, "设置壁纸失败"
         if image_url:
-            # 从 URL 提取原始文件名（与服务器缓存命名完全一致，无需重命名）
             file_name = os.path.basename(urllib.parse.urlparse(image_url).path)
             cache_path = os.path.join(CACHE_DIR, file_name)
             if download_image(image_url, cache_path):
                 if set_wallpaper(cache_path):
+                    self._persist_wallpaper_date(date_str)
                     return True, f"已设置壁纸: {date_str}"
                 return False, "设置壁纸失败"
         return False, f"无法获取壁纸: {date_str}"
@@ -824,6 +835,7 @@ class BingWallpaperApp:
                     history.append(date_str)
                     if len(history) > 50:
                         del history[:len(history) - 50]
+                    self._persist_wallpaper_date(date_str)
                     return True, f"轮巡壁纸（缓存）: {date_str}"
                 continue
 
@@ -836,6 +848,7 @@ class BingWallpaperApp:
                     history.append(date_str)
                     if len(history) > 50:
                         del history[:len(history) - 50]
+                    self._persist_wallpaper_date(date_str)
                     return True, f"轮巡壁纸: {date_str}"
                 # 下载成功但设置失败 -> 清理损坏文件，跳过此日期
                 try:
@@ -1022,6 +1035,19 @@ class BingWallpaperApp:
         except Exception as e:
             self.notify(f"打开网站失败: {e}", "错误")
 
+    def on_view_wallpaper_details(self):
+        """打开当前壁纸的详情页"""
+        import webbrowser
+        date_str = self._current_wallpaper_date
+        if not date_str or len(date_str) != 8:
+            self.notify("当前无壁纸信息，请先更新壁纸", "提示")
+            return
+        url = f"{WEBSITE_URL}?date={date_str}"
+        try:
+            webbrowser.open(url)
+        except Exception as e:
+            self.notify(f"打开详情失败: {e}", "错误")
+
     def on_exit(self, icon, item=None):
         self.stop_scheduler()
         if icon:
@@ -1176,6 +1202,10 @@ class BingWallpaperApp:
         return pystray.Menu(
             pystray.MenuItem(APP_TITLE, None, enabled=False),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem(
+                "查看当前壁纸详情",
+                lambda icon, item: self.on_view_wallpaper_details(),
+            ),
             pystray.MenuItem("分辨率", pystray.Menu(*res_items)),
             pystray.MenuItem("切换模式", pystray.Menu(*mode_items)),
             pystray.Menu.SEPARATOR,
