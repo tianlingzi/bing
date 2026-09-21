@@ -12,7 +12,7 @@ Bing首页每日都会更新一张来自世界各地的精美图片。通过 **[
 您可以直接在浏览器中输入以下地址，访问本项目主页，体验每日壁纸服务：
 
 - **项目主页：** [https://www.tianlingzi.top/bing](https://www.tianlingzi.top/bing/)
-- **项目壁纸墙：** [https://www.tianlingzi.top/bing/bashboard.php](https://www.tianlingzi.top/bing/bashboard.php/)
+- **项目壁纸墙：** [https://www.tianlingzi.top/bing/dashboard.php](https://www.tianlingzi.top/bing/dashboard.php/)
 
 更多项目介绍和技术细节，请访问本人博客介绍页面：
 
@@ -102,7 +102,7 @@ php直接输出图片链接不提供体验链接，由于php直接输出图片�
 ## 项目部署
 ### 下载项目
 将项目文件全部下载，存放到您的服务器上。
-项目网页入口文件：`index.php`。其他：bashboard.php（壁纸墙）
+项目网页入口文件：`index.php`。其他：`dashboard.php`（壁纸墙）
 
 ### 安装依赖
 1.安装php的sqlite扩展
